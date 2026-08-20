@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<!--
+  世界杯转播大屏 v2 · 真数据 + 演示混合
+  ─────────────────────────────────────────────
+  数据策略（2026-06-11 起）：
+  - 真数据（来自 /worldcup ← 直播吧解析）：焦点比赛、今日/近期赛程、比分与状态、
+    小组积分榜、近期赛果、世界杯新闻快讯、数据更新时间
+  - 演示数据（暂无数据源，面板标"演示数据"）：技术统计条（实时事件已接真数据；晋级概率已移除）
+    （这三块等比赛详情页解析落地后接真）
+  - 取数顺序：主应用 localhost:3721 → dev 服务器 localhost:3722（node src/worldcup-dev-server.js）
+    → 都失败则整页演示数据并顶部提示
+  - 国旗：中文队名→flagcdn 映射，未命中退直播吧队徽，再失败隐藏
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>FIFA World Cup 2026 · 赛况大屏 v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #04061c;
+    --bg-1: #090d33;
+    --bg-2: #130f4e;
+    --card: rgba(12, 18, 58, 0.78);
+    --neon: #2e7fff;
+    --neon-line: rgba(64, 140, 255, 0.42);
+    --neon-soft: rgba(46, 127, 255, 0.35);
+    --ink: #eaf2ff;
+    --ink-2: #9fb4e0;
+    --dim: #5a6ba0;
+    --live: #e8273c;
+    --live-glow: rgba(232, 39, 60, 0.55);
+    --gold: #f0c75e;
+    --blue-bar: #2e7fff;
+    --red-bar: #e8273c;
+    --num: 'Oswald', 'Noto Sans SC', sans-serif;
+    --cn: 'Noto Sans SC', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #03040f; overflow: hidden; font-family: var(--cn); }
+
+  /* 设计基准 1920×1080；fit() 会按窗口比例在合理范围内动态调整宽高，
+     消除上下黑边（布局是 flex/grid，伸缩天然成立），仅极端长宽比下保留最小黑边 */
+  #stage {
+    position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+    transform-origin: top left; color: var(--ink);
+    background:
+      radial-gradient(900px 420px at 50% -12%, rgba(90, 70, 230, 0.35), transparent 65%),
+      radial-gradient(1000px 500px at 4% 0%, rgba(120, 60, 220, 0.18), transparent 60%),
+      radial-gradient(1000px 500px at 98% 2%, rgba(50, 90, 240, 0.22), transparent 60%),
+      linear-gradient(165deg, var(--bg-1) 0%, var(--bg-0) 48%, var(--bg-2) 100%);
+    display: flex; flex-direction: column;
+  }
+  #stage::before {
+    content: ''; position: absolute; inset: 0 0 auto 0; height: 240px; pointer-events: none;
+    background-image:
+      radial-gradient(circle, rgba(140, 170, 255, 0.35) 1px, transparent 1.5px),
+      radial-gradient(circle, rgba(140, 170, 255, 0.18) 1px, transparent 1.5px);
+    background-size: 110px 64px, 56px 38px;
+    background-position: 12px 8px, 30px 20px;
+    -webkit-mask-image: linear-gradient(180deg, #000 30%, transparent);
+    mask-image: linear-gradient(180deg, #000 30%, transparent);
+  }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--neon-line);
+    border-radius: 12px;
+    box-shadow: 0 0 0 1px rgba(20, 40, 110, 0.45), 0 0 24px rgba(40, 90, 230, 0.15), inset 0 0 36px rgba(20, 50, 160, 0.08);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .panel-head {
+    flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px 10px; font-size: 19px; font-weight: 900; letter-spacing: 0.06em;
+    border-bottom: 1px solid rgba(64, 140, 255, 0.22);
+  }
+  .panel-head .aux { font-size: 13px; font-weight: 400; color: var(--ink-2); letter-spacing: 0.05em; }
+  .live-tag { color: var(--live); font-size: 14px; font-weight: 700; letter-spacing: 0.12em; }
+  /* 常驻动画一律低频离散步进（steps）：任何一个 60fps 的平滑动画都会迫使合成器
+     以 60fps 重新合成整屏 → 核显常驻负载。信号灯用 steps(1) 硬闪（更像直播台），
+     跑马灯 20 步/秒（步距 ~2px，肉眼接近平滑），整屏合成频率从 60fps 降到 ~20fps。 */
+  .live-tag::before { content: '●'; margin-right: 5px; animation: blink 1.4s steps(1, end) infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  .demo-tag {
+    font-size: 11.5px; font-weight: 400; color: #c9a86a; letter-spacing: 0.1em;
+    border: 1px solid rgba(240, 199, 94, 0.4); border-radius: 4px; padding: 1px 8px;
+  }
+  .panel-link {
+    flex: none; text-align: center; font-size: 13.5px; color: var(--neon);
+    padding: 8px 0 10px; cursor: pointer; letter-spacing: 0.05em;
+  }
+  .panel-link:hover { color: #7db1ff; }
+  .flag { border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.12); object-fit: cover; }
+  .empty-note { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14.5px; text-align: center; line-height: 2; }
+
+  /* ── 顶栏 ── */
+  .top { height: 104px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; position: relative; z-index: 2; }
+  .top-left { display: flex; align-items: center; gap: 18px; }
+  .trophy { font-size: 56px; filter: drop-shadow(0 0 16px rgba(240, 199, 94, 0.6)); }
+  .masthead-en {
+    font-family: var(--num); font-size: 44px; font-weight: 700; letter-spacing: 0.03em; line-height: 1.05;
+    background: linear-gradient(180deg, #ffffff 30%, #b9ccf5 75%, #8fa9e8);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .masthead-en sup { font-size: 14px; -webkit-text-fill-color: #b9ccf5; }
+  .masthead-cn { font-size: 15px; color: var(--ink-2); letter-spacing: 0.34em; margin-top: 3px; }
+  .top-right { display: flex; align-items: center; }
+  .top-stat { padding: 0 30px; text-align: left; border-left: 1px solid rgba(100, 130, 220, 0.25); }
+  .top-stat-label { font-size: 13.5px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; }
+  .top-stat-value { font-family: var(--num); font-size: 25px; font-weight: 600; letter-spacing: 0.04em; margin-top: 2px; white-space: nowrap; }
+  .clock-ico { width: 16px; height: 16px; border: 1.5px solid var(--ink-2); border-radius: 50%; position: relative; flex: none; }
+  .clock-ico::before { content: ''; position: absolute; left: 46%; top: 22%; width: 1.5px; height: 32%; background: var(--ink-2); }
+  .clock-ico::after { content: ''; position: absolute; left: 46%; top: 46%; width: 32%; height: 1.5px; background: var(--ink-2); }
+  .fifa-block {
+    margin-left: 30px; padding: 10px 18px; border-radius: 10px;
+    background: linear-gradient(160deg, #1b2f8a, #101a55);
+    border: 1px solid var(--neon-line);
+    font-family: var(--num); font-weight: 700; font-style: italic;
+    font-size: 17px; line-height: 1.15; letter-spacing: 0.04em; text-align: center;
+  }
+  .fifa-block b { display: block; font-size: 26px; color: var(--gold); }
+  .conn-banner {
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%); z-index: 5;
+    font-size: 13.5px; color: #ffd9a8; letter-spacing: 0.06em;
+    background: rgba(90, 50, 10, 0.85); border: 1px solid rgba(240, 180, 90, 0.5);
+    border-radius: 8px; padding: 5px 22px; display: none;
+  }
+
+  /* ── 主区 ── */
+  .main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding: 0 26px; position: relative; z-index: 2; }
+  .row1 { flex: 1.95; min-height: 0; display: grid; grid-template-columns: 430px 1fr 470px; gap: 16px; }
+  .row2 { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 700px; gap: 16px; }
+  .col-left { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+  .stats-panel { flex: 1.55; }
+  .others-panel { flex: 1; }
+
+  /* ── 左上：比赛数据（演示） / 小组积分榜（真） ── */
+  .stats-teams { display: flex; align-items: center; justify-content: space-between; padding: 14px 26px 6px; }
+  .stats-team { text-align: center; }
+  .stats-team .flag { width: 74px; height: 50px; }
+  .stats-team div { font-size: 17px; font-weight: 700; margin-top: 6px; }
+  .stats-list { flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 4px 20px 12px; }
+  .stat-row { display: grid; grid-template-columns: 44px 1fr 64px 1fr 44px; align-items: center; gap: 8px; }
+  .stat-num { font-family: var(--num); font-size: 19px; font-weight: 600; }
+  .stat-num.r { text-align: right; }
+  .stat-label { text-align: center; font-size: 14px; color: var(--ink-2); }
+  .stat-bar { height: 7px; border-radius: 4px; background: rgba(30, 45, 110, 0.8); position: relative; overflow: hidden; }
+  .stat-bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+  .stat-bar.l i { right: 0; background: linear-gradient(90deg, rgba(46,127,255,.35), var(--blue-bar)); box-shadow: 0 0 8px var(--neon-soft); }
+  .stat-bar.r i { left: 0; background: linear-gradient(90deg, var(--red-bar), rgba(232,39,60,.35)); box-shadow: 0 0 8px var(--live-glow); }
+  .grp-wrap { flex: 1; overflow-y: auto; padding: 10px 18px 8px; display: flex; flex-direction: column; gap: 12px; }
+  .grp-name { font-size: 13px; font-weight: 700; color: var(--gold); letter-spacing: 0.18em; margin-bottom: 4px; }
+  .grp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .grp-table th { font-weight: 400; color: var(--dim); text-align: left; padding: 2px 5px; border-bottom: 1px solid rgba(64,140,255,.22); }
+  .grp-table td { padding: 4px 5px; color: var(--ink-2); border-bottom: 1px dashed rgba(64,140,255,.15); }
+  .grp-table .tm { color: var(--ink); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .grp-table .tm .flag { width: 22px; height: 15px; }
+  .grp-table .pts { color: var(--gold); font-family: var(--num); font-weight: 700; }
+
+  /* ── 左下：其他比赛 ── */
+  .others-list { flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 4px 16px; }
+  .other-row { display: flex; align-items: center; gap: 10px; }
+  .other-row .flag { width: 34px; height: 23px; }
+  .other-row .name { flex: 1; font-size: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .other-row .name.r { text-align: right; }
+  .other-score {
+    font-family: var(--num); font-size: 17px; font-weight: 700; letter-spacing: 0.06em;
+    background: rgba(22, 38, 110, 0.9); border: 1px solid var(--neon-line); border-radius: 7px;
+    padding: 2px 14px; white-space: nowrap;
+  }
+
+  /* ── 中央 hero ── */
+  .hero {
+    position: relative; overflow: hidden;
+    background:
+      linear-gradient(180deg, rgba(6, 10, 38, 0.72) 0%, rgba(6, 10, 38, 0.28) 38%, rgba(4, 8, 32, 0.55) 78%, rgba(4, 6, 28, 0.9) 100%),
+      linear-gradient(180deg, rgba(20, 30, 120, 0.45), rgba(20, 30, 120, 0.45)),
+      url('https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Mecz_pi%C5%82karski_Wis%C5%82a_Krak%C3%B3w_-_Zag%C5%82%C4%99bie_Sosnwoiec%2C_28_pa%C5%BAdziernika_2022%2C_Po%C5%BCegnanie_Stadionu_Ludowego%2C_KP.jpg/1920px-Mecz_pi%C5%82karski_Wis%C5%82a_Krak%C3%B3w_-_Zag%C5%82%C4%99bie_Sosnwoiec%2C_28_pa%C5%BAdziernika_2022%2C_Po%C5%BCegnanie_Stadionu_Ludowego%2C_KP.jpg')
+      center 38% / cover no-repeat;
+    background-color: #0a0e35;
+    display: flex; flex-direction: column; align-items: center; padding: 16px 36px 14px;
+  }
+  .hero-banner {
+    font-size: 19px; font-weight: 900; letter-spacing: 0.32em; text-indent: 0.32em; color: #dfeaff;
+    background: linear-gradient(180deg, rgba(37, 87, 216, 0.95), rgba(22, 48, 143, 0.95));
+    border: 1px solid var(--neon-line); padding: 7px 56px;
+    clip-path: polygon(5% 0, 95% 0, 100% 100%, 0 100%);
+    box-shadow: 0 0 24px rgba(46, 110, 255, 0.5);
+  }
+  .hero-stage { margin-top: 9px; font-size: 15px; color: #c4d4f8; letter-spacing: 0.28em; text-indent: 0.28em; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+  /* 两侧轨道 minmax(0,1fr) 可收缩 + justify-content:center 兜底：内容再宽也对称分摊，不会单边贴边 */
+  .hero-row { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; justify-items: center; justify-content: center; column-gap: 20px; width: 100%; }
+  .hero-team { width: min(170px, 100%); min-width: 0; text-align: center; }
+  .hero-team-cn { font-size: 33px; font-weight: 900; letter-spacing: 0.12em; white-space: nowrap; text-shadow: 0 2px 14px rgba(0,0,0,.85); }
+  .hero-team .flag { width: min(136px, 94%); height: auto; aspect-ratio: 136 / 91; object-fit: cover; border-radius: 7px; margin-top: 14px; box-shadow: 0 6px 22px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.18); }
+  .hero-mid { display: flex; flex-direction: column; align-items: center; min-width: 220px; }
+  .hero-score {
+    font-family: var(--num); font-size: 124px; font-weight: 700; line-height: 1; letter-spacing: 0.02em;
+    color: #fff; text-shadow: 0 0 36px rgba(150, 190, 255, 0.5), 0 4px 18px rgba(0,0,0,.75);
+    white-space: nowrap;
+  }
+  .hero-score i { font-style: normal; font-size: 92px; color: #c9d8f8; margin: 0 8px; }
+  .hero-clock {
+    margin-top: 10px; font-family: var(--num); font-size: 20px; font-weight: 600; letter-spacing: 0.06em;
+    background: linear-gradient(180deg, rgba(30, 60, 160, 0.92), rgba(14, 26, 80, 0.92));
+    border: 1px solid var(--neon-line); border-radius: 7px; padding: 2px 18px;
+    clip-path: polygon(6% 0, 94% 0, 100% 100%, 0 100%);
+    box-shadow: 0 0 18px rgba(46, 110, 255, 0.4);
+    white-space: nowrap;
+  }
+  .hero-foot { flex: none; display: flex; justify-content: space-between; align-items: flex-end; width: 100%; padding: 0 14px 28px; min-height: 64px; }
+  .scorer-col { display: flex; flex-direction: column; gap: 9px; }
+  .scorer-col.r { align-items: flex-end; }
+  .scorer { font-size: 17.5px; color: #eef4ff; display: flex; align-items: center; gap: 9px; text-shadow: 0 1px 8px rgba(0,0,0,.85); }
+  .ball { width: 19px; height: 19px; border-radius: 50%; flex: none; position: relative;
+    background: radial-gradient(circle at 35% 32%, #fff 0 30%, #cfd8ea 34% 55%, #6f7d99 62% 100%);
+    box-shadow: 0 0 6px rgba(255,255,255,.35); }
+  .ball::after { content: ''; position: absolute; inset: 30%; background: #2a3550; clip-path: polygon(50% 0, 100% 38%, 81% 100%, 19% 100%, 0 38%); }
+  .scorer b { font-family: var(--num); font-weight: 600; color: var(--gold); }
+  .hero-meta { width: 100%; text-align: center; font-size: 15.5px; color: #d6e4ff; text-shadow: 0 1px 8px rgba(0,0,0,.9); letter-spacing: 0.05em; }
+  .hero-live {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    font-family: var(--num); font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #fff;
+    background: var(--live); border-radius: 5px; padding: 3px 16px;
+    box-shadow: 0 0 16px var(--live-glow); animation: blink 1.6s steps(1, end) infinite;
+  }
+
+  /* ── 右柱：赛程 ── */
+  .sched-list { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 4px; }
+  .sched-row {
+    flex: 1; display: flex; align-items: center; gap: 6px;
+    border: 1px solid rgba(64, 140, 255, 0.26); border-radius: 10px;
+    background: rgba(14, 22, 66, 0.6); padding: 0 14px;
+  }
+  .sched-row.live { border-color: rgba(232, 39, 60, 0.65); background: linear-gradient(90deg, rgba(96, 16, 32, 0.6), rgba(46, 14, 44, 0.55)); box-shadow: 0 0 16px rgba(232, 39, 60, 0.2); }
+  .sched-time { width: 96px; flex: none; }
+  .sched-time b { font-family: var(--num); font-size: 21px; font-weight: 600; display: block; line-height: 1.1; white-space: nowrap; }
+  .sched-time .st-live { font-size: 12.5px; color: var(--live); font-weight: 700; }
+  .sched-time .st-done { font-size: 12.5px; color: var(--ink-2); }
+  .sched-time span { font-size: 11.5px; color: var(--dim); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 92px; }
+  .sched-vs { flex: 1; display: grid; grid-template-columns: 1fr 56px 1fr; align-items: center; }
+  .sched-side { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+  .sched-side .flag { width: 56px; height: 38px; }
+  .sched-side span { font-size: 15px; font-weight: 500; white-space: nowrap; }
+  .sched-vs .vs { font-family: var(--num); font-size: 16px; color: var(--ink-2); text-align: center; white-space: nowrap; }
+  .sched-vs .vs.score { font-size: 21px; font-weight: 700; color: #fff; }
+
+  /* ── 下排：实时事件 ── */
+  .events-strip { flex: 1; display: flex; align-items: stretch; padding: 8px 6px 4px; min-height: 0; }
+  .event-cell { flex: 1; min-width: 0; padding: 6px 14px; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+  .event-cell + .event-cell { border-left: 1px solid rgba(80, 110, 200, 0.3); }
+  .event-top { display: flex; align-items: center; gap: 8px; font-family: var(--num); font-size: 16px; font-weight: 600; color: var(--ink-2); }
+  .event-main { font-size: 15.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event-main.goal { color: #6aa8ff; }
+  .event-sub { font-size: 12.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ico-yellow { width: 13px; height: 17px; border-radius: 2.5px; background: linear-gradient(160deg, #ffd84d, #e0a800); box-shadow: 0 0 6px rgba(255, 216, 77, 0.5); flex: none; }
+  .ico-red { width: 13px; height: 17px; border-radius: 2.5px; background: linear-gradient(160deg, #ff6a6a, #c01730); box-shadow: 0 0 6px rgba(255, 90, 90, 0.5); flex: none; }
+  .ico-sub { font-size: 16px; font-weight: 900; flex: none; line-height: 1; }
+  .ico-sub .in { color: #3ddc7d; } .ico-sub .out { color: #ff5a5a; }
+
+  /* ── 下排右：近期赛果 / 即将开赛（真） ── */
+  .res-list { flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 6px 18px 2px; min-height: 0; }
+  .res-row { display: flex; align-items: center; gap: 12px; font-size: 15px; padding: 3px 0; }
+  .res-row .when { font-family: var(--num); font-size: 14px; color: var(--ink-2); width: 96px; flex: none; }
+  .res-row .stage { font-size: 12.5px; color: var(--dim); width: 150px; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .res-row .pair { flex: 1; display: grid; grid-template-columns: 1fr 70px 1fr; align-items: center; gap: 6px; }
+  .res-row .side { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .res-row .side.r { justify-content: flex-end; }
+  .res-row .side span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .res-row .flag { width: 28px; height: 19px; }
+  .res-row .mid { font-family: var(--num); font-weight: 700; font-size: 17px; text-align: center; color: #fff; white-space: nowrap; }
+  .res-row .mid.vs { color: var(--ink-2); font-size: 13px; }
+
+  /* ── 底部新闻快讯 ── */
+  .news-bar {
+    height: 54px; flex: none; margin: 14px 26px 18px;
+    display: flex; align-items: stretch; overflow: hidden;
+    background: var(--card); border: 1px solid var(--neon-line); border-radius: 12px;
+    position: relative; z-index: 2;
+  }
+  .news-label {
+    flex: none; display: flex; align-items: center; gap: 10px; padding: 0 26px 0 20px;
+    font-size: 17px; font-weight: 900; letter-spacing: 0.1em; color: #fff;
+    background: linear-gradient(120deg, #6a2cd8, #2e4fd8);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
+  }
+  .spk { width: 0; height: 0; border: 8px solid transparent; border-left: 13px solid #fff; border-right: none; transform: translateX(3px); }
+  .news-viewport { flex: 1; overflow: hidden; display: flex; align-items: center; }
+  .news-track { display: inline-flex; align-items: center; white-space: nowrap; animation: news-scroll 48s steps(960) infinite; }
+  .news-item { font-size: 16.5px; color: #d6e4ff; padding: 0 34px; }
+  .news-sep { color: var(--dim); }
+  @keyframes news-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+  /* ── 出场/退场：错峰故障闪动（与热点模式 hs-glitch-in 同款质感） ──
+     页面加载即播出场；退场由宿主面板 postMessage {type:'worldcup-exit'} 触发，
+     宿主等动画播完再卸载 iframe（见 brain-ui/worldcup.js） */
+  body.booting .boot-item {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: wcb-glitch-in 620ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+    animation-delay: var(--boot-delay, 0ms);
+    will-change: transform, opacity, filter, clip-path;
+  }
+  @keyframes wcb-glitch-in {
+    0%   { opacity: 0;    transform: translateY(10px) skewX(-0.8deg); filter: brightness(1.9) contrast(1.35) saturate(0.6); clip-path: inset(42% 0 44% 0); }
+    14%  { opacity: 0.9;  transform: translateY(-1px) translateX(-3px); filter: brightness(2.25) contrast(1.6) saturate(1.35); clip-path: inset(0 0 72% 0); }
+    22%  { opacity: 0.35; transform: translateY(4px) translateX(3px); clip-path: inset(66% 0 0 0); }
+    34%  { opacity: 1;    transform: translateY(0) translateX(-1px); filter: brightness(1.35) contrast(1.18) saturate(1.1); clip-path: inset(0 0 0 0); }
+    46%  { opacity: 0.72; transform: translateY(1px); filter: brightness(1.8) contrast(1.35); }
+    100% { opacity: 1;    transform: none; filter: none; clip-path: inset(0 0 0 0); }
+  }
+  body.exiting .boot-item {
+    animation: wcb-glitch-out 420ms cubic-bezier(0.55, 0, 0.85, 0.4) forwards;
+    animation-delay: var(--exit-delay, 0ms);
+    will-change: transform, opacity, filter, clip-path;
+  }
+  @keyframes wcb-glitch-out {
+    0%   { opacity: 1;    transform: none; clip-path: inset(0 0 0 0); }
+    18%  { opacity: 0.85; transform: translateX(3px); filter: brightness(1.9) contrast(1.5); clip-path: inset(0 0 58% 0); }
+    34%  { opacity: 0.4;  transform: translateX(-4px) translateY(2px); clip-path: inset(48% 0 0 0); }
+    55%  { opacity: 0.7;  filter: brightness(2.2) contrast(1.7) saturate(0.5); clip-path: inset(20% 0 30% 0); }
+    100% { opacity: 0;    transform: translateY(10px) skewX(-0.6deg); clip-path: inset(42% 0 44% 0); }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+
+  <div class="conn-banner" id="conn-banner">未连接后端数据（localhost:3721 / 3722 均不可达）· 当前全部为演示数据</div>
+
+  <!-- ── 顶栏 ── -->
+  <div class="top boot-item" style="--boot-delay:40ms;--exit-delay:300ms">
+    <div class="top-left">
+      <div class="trophy">🏆</div>
+      <div>
+        <div class="masthead-en">FIFA WORLD CUP 2026<sup>™</sup></div>
+        <div class="masthead-cn">2026国际足联世界杯</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <div class="top-stat">
+        <div class="top-stat-label"><span class="clock-ico"></span>当前时间</div>
+        <div class="top-stat-value" id="top-clock">--</div>
+      </div>
+      <div class="top-stat">
+        <div class="top-stat-label" id="ts2-label">数据更新</div>
+        <div class="top-stat-value" id="ts2-value">--</div>
+      </div>
+      <div class="top-stat">
+        <div class="top-stat-label" id="ts3-label">数据源</div>
+        <div class="top-stat-value" id="ts3-value">--</div>
+      </div>
+      <div class="fifa-block">FIFA<br>WORLD CUP<b>2026</b></div>
+    </div>
+  </div>
+
+  <!-- ── 主区 ── -->
+  <div class="main">
+
+    <div class="row1">
+      <div class="col-left">
+        <div class="panel stats-panel boot-item" style="--boot-delay:260ms;--exit-delay:200ms">
+          <div class="panel-head"><span id="stats-title">小组积分榜</span><span class="aux" id="stats-aux"></span></div>
+          <div style="display:flex;flex-direction:column;flex:1;min-height:0" id="stats-body"></div>
+        </div>
+        <div class="panel others-panel boot-item" style="--boot-delay:460ms;--exit-delay:120ms">
+          <div class="panel-head"><span id="others-title">其他比赛</span><span class="aux" id="others-aux"></span></div>
+          <div class="others-list" id="others-list"></div>
+        </div>
+      </div>
+
+      <div class="panel hero boot-item" id="hero" style="--boot-delay:140ms;--exit-delay:240ms"></div>
+
+      <div class="panel boot-item" style="--boot-delay:360ms;--exit-delay:160ms">
+        <div class="panel-head"><span id="sched-title">🗓 今日赛程</span><span class="aux" id="sched-date"></span></div>
+        <div class="sched-list" id="sched-list"></div>
+        <div class="panel-link" id="sched-link">数据来源：直播吧 · 北京时间</div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="panel boot-item" style="--boot-delay:560ms;--exit-delay:80ms">
+        <div class="panel-head">实时事件 <span class="aux" id="events-aux"></span><span class="demo-tag" id="events-demo-tag">演示数据</span></div>
+        <div class="events-strip" id="events-strip"></div>
+      </div>
+
+      <div class="panel boot-item" style="--boot-delay:660ms;--exit-delay:40ms">
+        <div class="panel-head"><span id="br-title">近期赛果</span><span class="aux" id="br-aux"></span></div>
+        <div class="res-list" id="br-body"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── 新闻快讯 ── -->
+  <div class="news-bar boot-item" style="--boot-delay:780ms;--exit-delay:0ms">
+    <div class="news-label"><span class="spk"></span>新闻快讯</div>
+    <div class="news-viewport"><div class="news-track" id="news-track"></div></div>
+  </div>
+
+</div>
+
+<script>
+// ═══ 国旗：中文队名 → flagcdn 代码（未命中退直播吧队徽，再失败隐藏） ═══════════
+
+const FLAG_CODES = {
+  阿根廷:'ar', 法国:'fr', 巴西:'br', 德国:'de', 西班牙:'es', 英格兰:'gb-eng', 葡萄牙:'pt',
+  荷兰:'nl', 日本:'jp', 韩国:'kr', 墨西哥:'mx', 南非:'za', 捷克:'cz', 加拿大:'ca',
+  波黑:'ba', 美国:'us', 巴拉圭:'py', 比利时:'be', 意大利:'it', 克罗地亚:'hr', 丹麦:'dk',
+  摩洛哥:'ma', 瑞士:'ch', 乌拉圭:'uy', 哥伦比亚:'co', 厄瓜多尔:'ec', 塞内加尔:'sn',
+  加纳:'gh', 喀麦隆:'cm', 尼日利亚:'ng', 突尼斯:'tn', 阿尔及利亚:'dz', 埃及:'eg',
+  沙特:'sa', 沙特阿拉伯:'sa', 卡塔尔:'qa', 伊朗:'ir', 澳大利亚:'au', 新西兰:'nz',
+  哥斯达黎加:'cr', 巴拿马:'pa', 洪都拉斯:'hn', 牙买加:'jm', 海地:'ht', 库拉索:'cw',
+  智利:'cl', 秘鲁:'pe', 委内瑞拉:'ve', 玻利维亚:'bo', 苏格兰:'gb-sct', 威尔士:'gb-wls',
+  挪威:'no', 瑞典:'se', 波兰:'pl', 奥地利:'at', 匈牙利:'hu', 塞尔维亚:'rs',
+  斯洛文尼亚:'si', 斯洛伐克:'sk', 罗马尼亚:'ro', 土耳其:'tr', 希腊:'gr', 乌克兰:'ua',
+  科特迪瓦:'ci', 马里:'ml', 布基纳法索:'bf', 佛得角:'cv', 约旦:'jo', 乌兹别克斯坦:'uz',
+  伊拉克:'iq', 阿联酋:'ae', 中国:'cn', 朝鲜:'kp', 印尼:'id', 印度尼西亚:'id',
+};
+
+function flagImg(team, fallbackLogo = '', cls = 'flag') {
+  const code = FLAG_CODES[team];
+  const src = code ? `https://flagcdn.com/w160/${code}.png` : fallbackLogo;
+  if (!src) return '';
+  return `<img class="${cls}" src="${src}" alt="${team}" onerror="this.style.display='none'">`;
+}
+
+// ═══ 演示数据（仅在后端不可达、或板块无真实数据源时使用） ═══════════════════════
+
+const DEMO = {
+  focus: {
+    league: '世界杯 1/4 决赛', home: '阿根廷', away: '法国', score: { home: 2, away: 1 },
+    status: 'live', startMs: Date.now() - 67 * 60000, time: '21:00',
+    channels: '咪咕 CCTV5 央视频',
+    scorersHome: [{ min: 23, name: '梅西' }, { min: 58, name: '阿尔瓦雷斯' }],
+    scorersAway: [{ min: 36, name: '姆巴佩' }],
+  },
+  stats: [
+    { label: '射门', h: 12, a: 8 }, { label: '射正', h: 5, a: 4 },
+    { label: '控球率', h: 58, a: 42, pct: true }, { label: '角球', h: 3, a: 2 },
+    { label: '黄牌', h: 1, a: 2 }, { label: '红牌', h: 0, a: 0 },
+  ],
+  others: [
+    { home: '巴西', away: '德国', score: { home: 1, away: 0 }, status: 'live' },
+    { home: '西班牙', away: '英格兰', score: { home: 0, away: 0 }, status: 'live' },
+    { home: '日本', away: '韩国', score: { home: 0, away: 0 }, status: 'live' },
+  ],
+  schedule: [
+    { time: '2026-06-10 21:00', league: '1/4决赛', home: '阿根廷', away: '法国', status: 'live', score: { home: 2, away: 1 } },
+    { time: '2026-06-10 23:00', league: '1/4决赛', home: '巴西', away: '德国', status: 'live', score: { home: 1, away: 0 } },
+    { time: '2026-06-11 02:00', league: '1/4决赛', home: '日本', away: '韩国', status: 'scheduled' },
+    { time: '2026-06-11 04:00', league: '1/4决赛', home: '西班牙', away: '英格兰', status: 'scheduled' },
+    { time: '2026-06-11 06:00', league: '1/4决赛', home: '葡萄牙', away: '荷兰', status: 'scheduled' },
+  ],
+  results: [
+    { time: '2026-06-10 18:00', league: '1/8决赛', home: '葡萄牙', away: '瑞士', score: { home: 3, away: 0 } },
+    { time: '2026-06-10 18:00', league: '1/8决赛', home: '荷兰', away: '美国', score: { home: 2, away: 1 } },
+    { time: '2026-06-09 21:00', league: '1/8决赛', home: '日本', away: '丹麦', score: { home: 1, away: 0 } },
+  ],
+  news: [
+    '官方：贝林厄姆因伤将缺席接下来的比赛',
+    'FIFA公布本届世界杯最佳阵容候选名单，梅西、姆巴佩领衔',
+    '内马尔恢复训练，有望在下一场比赛复出',
+  ],
+};
+
+// 实时事件演示数据（仅后端不可达时使用；真数据走 match.events）
+const DEMO_EVENTS = [
+  { min: 67, type: 'save', main: '梅西 射门被扑出', sub: '' },
+  { min: 65, type: 'yellow', main: '法国 获得黄牌', sub: '格列兹曼' },
+  { min: 63, type: 'sub', main: '法国 换人', sub: '登贝莱 换下 吉鲁' },
+  { min: 58, type: 'goal', main: '阿尔瓦雷斯 进球！', sub: '阿根廷 2:1 法国' },
+  { min: 36, type: 'goal', main: '姆巴佩 进球！', sub: '阿根廷 1:1 法国' },
+  { min: 23, type: 'goal', main: '梅西 进球！', sub: '阿根廷 1:0 法国' },
+];
+
+// ═══ 取数：主应用 3721 → dev 服务器 3722 → 演示数据 ═══════════════════════════
+
+const API_BASES = ['http://localhost:3721', 'http://localhost:3722'];
+const $ = (id) => document.getElementById(id);
+
+let MODE = 'demo';   // 'real' | 'demo'
+let VM = null;       // 真数据视图模型
+
+async function fetchReal() {
+  for (const base of API_BASES) {
+    try {
+      const res = await fetch(`${base}/worldcup?viewed=1`, { signal: AbortSignal.timeout(7000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.matches) && data.matches.length) return data;
+    } catch { /* 换下一个源 */ }
+  }
+  return null;
+}
+
+function isToday(ms) {
+  if (ms == null) return false;
+  const d = new Date(ms), n = new Date();
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+}
+
+function buildVM(data) {
+  const ms = (data.matches || []).slice().sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
+  const now = Date.now();
+  const live = ms.filter((m) => m.status === 'live');
+  const finished = ms.filter((m) => m.status === 'finished' && m.score);
+  const upcoming = ms.filter((m) => m.status === 'scheduled' && (m.startMs || 0) > now);
+  const today = ms.filter((m) => isToday(m.startMs));
+  const focus = live[0] || upcoming[0] || finished[finished.length - 1] || ms[0];
+  return {
+    ms, live, finished, upcoming, today, focus,
+    standings: data.standings || {}, news: data.news || [],
+    fetchedAt: data.fetchedAt, stale: !!data.stale,
+  };
+}
+
+// ═══ 通用格式化 ═══════════════════════════════════════════════════════════════
+
+const pad = (n) => String(n).padStart(2, '0');
+function hm(timeStr) { return String(timeStr || '').slice(11, 16) || '--:--'; }
+function md(timeStr) { return String(timeStr || '').slice(5, 10).replace('-', '/'); }
+function countdown(ms) {
+  const diff = ms - Date.now();
+  if (diff <= 0) return '即将开球';
+  const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000);
+  if (h >= 48) return `${Math.floor(h / 24)} 天后`;
+  if (h > 0) return `${h}小时${m}分后开球`;
+  return `${m}分钟后开球`;
+}
+
+// ═══ 渲染：中央焦点比赛 ═══════════════════════════════════════════════════════
+
+function renderHero(focus) {
+  if (!focus) { $('hero').innerHTML = '<div class="empty-note">暂无比赛数据</div>'; return; }
+  const banner = focus.status === 'live' ? '正在进行' : (focus.status === 'finished' ? '最近赛果' : '即将开始');
+  const mid = focus.score
+    ? `<div class="hero-score">${focus.score.home}<i>:</i>${focus.score.away}</div>`
+    : `<div class="hero-score" style="font-size:84px;letter-spacing:.18em">VS</div>`;
+  const scorer = (s) => `<div class="scorer"><span class="ball"></span><b>${s.min}'</b>&nbsp;${s.name}</div>`;
+  // 进球名单只有演示焦点才有（真数据待详情页解析）；真数据展示开球时间+转播渠道
+  const foot = (focus.scorersHome || focus.scorersAway)
+    ? `<div class="scorer-col">${(focus.scorersHome || []).map(scorer).join('')}</div>
+       <div class="scorer-col r">${(focus.scorersAway || []).map(scorer).join('')}</div>`
+    : `<div class="hero-meta">开球：${focus.time || '--'}（北京时间）${focus.channels ? ` · 转播：${focus.channels}` : ''}</div>`;
+
+  $('hero').innerHTML = `
+    <div class="hero-banner">${banner}</div>
+    <div class="hero-stage">${focus.league || ''}</div>
+    <div class="hero-row">
+      <div class="hero-team"><div class="hero-team-cn">${focus.home}</div>${flagImg(focus.home, focus.homeLogo)}</div>
+      <div class="hero-mid">${mid}<div class="hero-clock" id="hero-clock">--</div></div>
+      <div class="hero-team"><div class="hero-team-cn">${focus.away}</div>${flagImg(focus.away, focus.awayLogo)}</div>
+    </div>
+    <div class="hero-foot">${foot}</div>
+    ${focus.status === 'live' ? '<div class="hero-live">· LIVE</div>' : ''}`;
+  tickHeroClock();
+}
+
+let demoHeroSec = 67 * 60 + 24;
+function tickHeroClock() {
+  const el = $('hero-clock');
+  if (!el) return;
+  const focus = MODE === 'real' ? VM?.focus : DEMO.focus;
+  if (!focus) return;
+  if (MODE === 'demo') {
+    demoHeroSec++;
+    el.textContent = `${Math.floor(demoHeroSec / 60)}:${pad(demoHeroSec % 60)}`;
+    return;
+  }
+  if (focus.status === 'live' && focus.clock?.periodCn) {
+    // 真实比赛分钟（qiumibao high_speed，随后端 2 分钟刷新）；墙钟估算含中场休息会虚高
+    // 补时只在半场末尾（45'/90'/105'/120'）展示，赛中挂着 +4' 会误导
+    const stop = focus.clock.stoppage && /^(45|90|105|120)\D/.test(focus.clock.periodCn)
+      ? ` +${focus.clock.stoppage}'` : '';
+    el.textContent = `${focus.clock.periodCn}${stop}`;
+  } else if (focus.status === 'live' && focus.startMs) {
+    el.textContent = `已开球 ${Math.max(0, Math.floor((Date.now() - focus.startMs) / 60000))} 分钟`;
+  } else if (focus.status === 'scheduled' && focus.startMs) {
+    el.textContent = countdown(focus.startMs);
+  } else {
+    el.textContent = focus.status === 'finished' ? '已结束' : (focus.time || '');
+  }
+}
+
+// ═══ 渲染：左上（真=小组积分榜 / 演示=技术统计） ═══════════════════════════════
+
+function renderStandings(standings) {
+  $('stats-title').textContent = '小组积分榜';
+  $('stats-aux').textContent = '据已结束小组赛自算';
+  const groups = Object.keys(standings);
+  if (!groups.length) {
+    $('stats-body').innerHTML = '<div class="empty-note">小组赛尚未产生赛果<br>首战结束后自动生成</div>';
+    return;
+  }
+  $('stats-body').innerHTML = `<div class="grp-wrap">${groups.map((g) => `
+    <div>
+      <div class="grp-name">${g} 组</div>
+      <table class="grp-table">
+        <thead><tr><th>球队</th><th>赛</th><th>胜平负</th><th>净</th><th>分</th></tr></thead>
+        <tbody>${standings[g].map((r) => `
+          <tr>
+            <td><span class="tm">${flagImg(r.team, r.logo)}${r.team}</span></td>
+            <td>${r.played}</td><td>${r.won}-${r.drawn}-${r.lost}</td>
+            <td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td class="pts">${r.pts}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>`).join('')}</div>`;
+}
+
+function renderDemoStats() {
+  $('stats-title').innerHTML = '比赛数据 <span class="demo-tag">演示数据</span>';
+  $('stats-aux').textContent = '';
+  const f = DEMO.focus;
+  $('stats-body').innerHTML = `
+    <div class="stats-teams">
+      <div class="stats-team">${flagImg(f.home)}<div>${f.home}</div></div>
+      <div class="stats-team">${flagImg(f.away)}<div>${f.away}</div></div>
+    </div>
+    <div class="stats-list">${DEMO.stats.map((s) => {
+      const total = (s.h + s.a) || 1;
+      const fmt = (v) => s.pct ? `${v}%` : v;
+      return `<div class="stat-row">
+        <span class="stat-num">${fmt(s.h)}</span>
+        <span class="stat-bar l"><i style="width:${(s.h / total) * 100}%"></i></span>
+        <span class="stat-label">${s.label}</span>
+        <span class="stat-bar r"><i style="width:${(s.a / total) * 100}%"></i></span>
+        <span class="stat-num r">${fmt(s.a)}</span>
+      </div>`;
+    }).join('')}</div>`;
+}
+
+// ═══ 渲染：左下 其他比赛 ═══════════════════════════════════════════════════════
+
+function renderOthers(list, aux) {
+  $('others-aux').textContent = aux || '';
+  if (!list.length) {
+    $('others-list').innerHTML = '<div class="empty-note">暂无其他场次</div>';
+    return;
+  }
+  $('others-list').innerHTML = list.map((m) => {
+    const mid = m.score
+      ? `${m.score.home} - ${m.score.away}`
+      : hm(m.time);
+    return `<div class="other-row">
+      ${flagImg(m.home, m.homeLogo)}<span class="name">${m.home}</span>
+      <span class="other-score">${mid}</span>
+      <span class="name r">${m.away}</span>${flagImg(m.away, m.awayLogo)}
+    </div>`;
+  }).join('');
+}
+
+// ═══ 渲染：右柱赛程 ═══════════════════════════════════════════════════════════
+
+function renderSchedule(rows, { title, dateText }) {
+  $('sched-title').textContent = `🗓 ${title}`;
+  $('sched-date').textContent = dateText;
+  if (!rows.length) {
+    $('sched-list').innerHTML = '<div class="empty-note">暂无赛程数据</div>';
+    return;
+  }
+  $('sched-list').innerHTML = rows.slice(0, 5).map((m) => {
+    const statusLine = m.status === 'live'
+      ? '<span class="st-live">进行中</span>'
+      : (m.status === 'finished' ? '<span class="st-done">已结束</span>' : '');
+    const mid = m.score
+      ? `<span class="vs score">${m.score.home} - ${m.score.away}</span>`
+      : '<span class="vs">VS</span>';
+    return `<div class="sched-row ${m.status === 'live' ? 'live' : ''}">
+      <div class="sched-time">
+        <b>${isToday(m.startMs) ? hm(m.time) : `${md(m.time)} ${hm(m.time)}`}</b>
+        ${statusLine}
+        <span>${(m.league || '').replace('世界杯', '')}</span>
+      </div>
+      <div class="sched-vs">
+        <div class="sched-side">${flagImg(m.home, m.homeLogo)}<span>${m.home}</span></div>
+        ${mid}
+        <div class="sched-side">${flagImg(m.away, m.awayLogo)}<span>${m.away}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══ 渲染：下排右（近期赛果 / 即将开赛） ═══════════════════════════════════════
+
+function renderBottomRight(vm) {
+  const useResults = vm.finished.length > 0;
+  const rows = useResults ? vm.finished.slice(-5).reverse() : vm.upcoming.slice(0, 5);
+  $('br-title').textContent = useResults ? '近期赛果' : '即将开赛';
+  $('br-aux').textContent = useResults ? '' : '72 小时内';
+  if (!rows.length) {
+    $('br-body').innerHTML = '<div class="empty-note">暂无数据</div>';
+    return;
+  }
+  $('br-body').innerHTML = rows.map((m) => {
+    const mid = m.score
+      ? `<span class="mid">${m.score.home} - ${m.score.away}</span>`
+      : '<span class="mid vs">VS</span>';
+    return `<div class="res-row">
+      <span class="when">${md(m.time)} ${hm(m.time)}</span>
+      <span class="stage">${m.league || ''}</span>
+      <div class="pair">
+        <div class="side r">${flagImg(m.home, m.homeLogo)}<span>${m.home}</span></div>
+        ${mid}
+        <div class="side">${flagImg(m.away, m.awayLogo)}<span>${m.away}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══ 渲染：实时事件（真数据：qiumibao match_event，经 /worldcup 的 match.events） + 新闻 ═══
+
+function eventIcon(kind) {
+  if (kind === 'yellow') return '<span class="ico-yellow"></span>';
+  if (kind === 'red') return '<span class="ico-red"></span>';
+  if (kind === 'sub') return '<span class="ico-sub"><span class="in">⬆</span><span class="out">⬇</span></span>';
+  return '<span class="ball"></span>';
+}
+
+// 后端事件 {min,type(中文),name,side,assist?} → 单元格视图
+function eventCell(e, focus) {
+  const team = e.side === 'home' ? focus.home : (e.side === 'away' ? focus.away : '');
+  let kind = 'other', main, sub = '';
+  if (/进球|点球|乌龙/.test(e.type)) {
+    kind = 'goal';
+    main = `${e.name || team} ${e.type}！`;
+    sub = e.assist ? `${e.assist} 助攻` : team;
+  } else if (/黄牌/.test(e.type)) {
+    kind = 'yellow';
+    main = team ? `${team} 获得黄牌` : `${e.name} 黄牌`;
+    sub = team ? e.name : '';
+  } else if (/红牌/.test(e.type)) {
+    kind = 'red';
+    main = team ? `${team} 获得红牌` : `${e.name} 红牌`;
+    sub = team ? e.name : '';
+  } else if (/换人|换下/.test(e.type)) {
+    kind = 'sub';
+    main = team ? `${team} 换人` : '换人';
+    sub = e.name;
+  } else {
+    main = e.name ? `${e.name} ${e.type}` : e.type;
+    sub = team;
+  }
+  return `
+    <div class="event-cell">
+      <div class="event-top">${eventIcon(kind)} ${e.min}'</div>
+      <div class="event-main ${kind === 'goal' ? 'goal' : ''}">${main}</div>
+      ${sub ? `<div class="event-sub">${sub}</div>` : ''}
+    </div>`;
+}
+
+function renderEvents() {
+  if (MODE === 'real') {
+    $('events-demo-tag').style.display = 'none';
+    const focus = VM?.focus;
+    const events = (focus?.events || []).slice(-6).reverse(); // 最新在左
+    $('events-aux').textContent = events.length ? `${focus.home} vs ${focus.away}` : '';
+    $('events-strip').innerHTML = events.length
+      ? events.map((e) => eventCell(e, focus)).join('')
+      : '<div class="empty-note">焦点比赛开赛后自动生成</div>';
+    return;
+  }
+  $('events-demo-tag').style.display = '';
+  $('events-aux').textContent = '';
+  $('events-strip').innerHTML = DEMO_EVENTS.map((e) => `
+    <div class="event-cell">
+      <div class="event-top">${eventIcon(e.type)} ${e.min}'</div>
+      <div class="event-main ${e.type === 'goal' ? 'goal' : ''}">${e.main}</div>
+      ${e.sub ? `<div class="event-sub">${e.sub}</div>` : ''}
+    </div>`).join('');
+}
+
+function renderNews(items) {
+  const list = items.length ? items : DEMO.news.map((t) => ({ title: t }));
+  const html = list.map((n) => `<span class="news-item">${n.title || n}</span>`).join('<span class="news-sep">|</span>');
+  $('news-track').innerHTML = html + '<span class="news-sep">|</span>' + html + '<span class="news-sep">|</span>';
+}
+
+// ═══ 模式装配 ═════════════════════════════════════════════════════════════════
+
+function renderReal(vm) {
+  MODE = 'real'; VM = vm;
+  $('conn-banner').style.display = 'none';
+
+  renderHero(vm.focus);
+  renderStandings(vm.standings);
+
+  const others = (vm.live.length ? vm.live : vm.upcoming)
+    .filter((m) => m !== vm.focus).slice(0, 3);
+  renderOthers(others, vm.live.length ? `${vm.live.length} 场进行中` : '接下来');
+  $('others-title').textContent = vm.live.length ? '其他比赛' : '后续场次';
+
+  const now = new Date();
+  const week = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  const todayRows = vm.today.length ? vm.today : vm.upcoming;
+  renderSchedule(todayRows, {
+    title: vm.today.length ? '今日赛程' : '近期赛程',
+    dateText: `${now.getMonth() + 1}月${now.getDate()}日  星期${week}`,
+  });
+
+  renderBottomRight(vm);
+  renderEvents();
+  renderNews(vm.news);
+
+  $('ts2-label').textContent = '数据更新';
+  const f = vm.fetchedAt ? new Date(vm.fetchedAt) : null;
+  $('ts2-value').textContent = f ? `${pad(f.getHours())}:${pad(f.getMinutes())}` : '--';
+  $('ts3-label').textContent = '数据源';
+  $('ts3-value').textContent = vm.stale ? '直播吧 · 缓存' : '直播吧 · 在线';
+}
+
+function renderDemo() {
+  MODE = 'demo'; VM = null;
+  $('conn-banner').style.display = 'block';
+
+  renderHero(DEMO.focus);
+  renderDemoStats();
+  $('others-title').innerHTML = '其他比赛';
+  renderOthers(DEMO.others, '上半场 45+2′');
+
+  const now = new Date();
+  const week = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  renderSchedule(DEMO.schedule.map((m) => ({ ...m, startMs: Date.now() })), {
+    title: '今日赛程', dateText: `${now.getMonth() + 1}月${now.getDate()}日  星期${week}`,
+  });
+
+  renderBottomRight({ finished: DEMO.results, upcoming: [] });
+  renderEvents();
+  renderNews([]);
+
+  $('ts2-label').textContent = '在线观众';
+  $('ts2-value').textContent = '1,248,532';
+  $('ts3-label').textContent = '全球热度';
+  $('ts3-value').textContent = '🔥 98.7M';
+}
+
+async function load() {
+  const data = await fetchReal();
+  if (data) renderReal(buildVM(data));
+  else renderDemo();
+}
+
+// ═══ 时钟 / 自动刷新 / 缩放 ═══════════════════════════════════════════════════
+
+function tickTopClock() {
+  const n = new Date();
+  $('top-clock').textContent =
+    `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())} ${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
+}
+
+function fit() {
+  // 自适应填充：保证设计尺寸不小于 1700×940（可读性下限），
+  // 在 2400×1700 上限内让舞台宽高跟随窗口比例 → 正常窗口下无黑边
+  const MIN_W = 1700, MIN_H = 940, MAX_W = 2400, MAX_H = 1700;
+  const s = Math.min(window.innerWidth / MIN_W, window.innerHeight / MIN_H);
+  const w = Math.max(MIN_W, Math.min(window.innerWidth / s, MAX_W));
+  const h = Math.max(MIN_H, Math.min(window.innerHeight / s, MAX_H));
+  const st = $('stage');
+  st.style.width = `${w}px`;
+  st.style.height = `${h}px`;
+  st.style.transform = `scale(${s})`;
+  st.style.left = `${Math.max(0, (window.innerWidth - w * s) / 2)}px`;
+  st.style.top = `${Math.max(0, (window.innerHeight - h * s) / 2)}px`;
+}
+window.addEventListener('resize', fit);
+
+// ═══ 出场/退场动画 ═══════════════════════════════════════════════════════════
+
+// 页面加载即播错峰出场（容器先闪入，数据随后填充）；动画结束后摘掉类，
+// 避免后续 re-render 或宿主重复打开时状态残留
+document.body.classList.add('booting');
+setTimeout(() => document.body.classList.remove('booting'), 2200);
+
+// 宿主面板关闭时发来 exit 消息 → 播退场动画（宿主等 ~680ms 再卸载 iframe）
+window.addEventListener('message', (event) => {
+  if (event?.data?.type !== 'worldcup-exit') return;
+  document.body.classList.remove('booting');
+  document.body.classList.add('exiting');
+});
+
+// ═══ PTT 转发：点过大屏后键盘焦点在本 iframe，空格到不了宿主窗口 ═══════════════
+// 把按住空格说话转发回宿主（brain-ui/worldcup.js 接收 worldcup-ptt 消息驱动 PTT）
+
+(() => {
+  const isSpace = (e) => e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
+  let held = false;
+  const post = (phase) => { try { window.parent?.postMessage({ type: 'worldcup-ptt', phase }, '*'); } catch {} };
+  window.addEventListener('keydown', (e) => {
+    if (!isSpace(e) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    e.preventDefault(); // 空格不滚动大屏
+    if (e.repeat || held) return;
+    held = true;
+    post('down');
+  }, { capture: true });
+  window.addEventListener('keyup', (e) => {
+    if (!isSpace(e) || !held) return;
+    held = false;
+    e.preventDefault();
+    post('up');
+  }, { capture: true });
+  // 按住期间失焦（切窗口/iframe 卸载）→ 取消而非误发半句
+  window.addEventListener('blur', () => { if (held) { held = false; post('cancel'); } });
+})();
+
+tickTopClock(); setInterval(tickTopClock, 1000);
+setInterval(tickHeroClock, 1000);
+setInterval(() => { if (MODE === 'real') load(); }, 120000);   // 真数据每 2 分钟跟随后端缓存刷新
+fit();
+load();
+</script>
+
+</body>
+</html>

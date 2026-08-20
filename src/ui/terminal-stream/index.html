@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alice Terminal Stream</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #050505;
+    --fg: #f4f4f4;
+    --muted: #8d8d8d;
+    --border: #242424;
+    --soft: #cfcfcf;
+    --code-bg: #111111;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+    overflow: hidden;
+  }
+
+  .terminal {
+    display: grid;
+    grid-template-rows: 38px 1fr;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg);
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--fg);
+    user-select: none;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  .dot.live {
+    background: #ffffff;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+  }
+
+  .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  .status {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .viewport {
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  pre,
+  .markdown {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: auto;
+  }
+
+  pre {
+    padding: 16px 18px 28px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.45;
+    font-size: 14px;
+    tab-size: 2;
+  }
+
+  .markdown {
+    display: none;
+    padding: 22px 28px 38px;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.7;
+    font-size: 15px;
+    color: var(--fg);
+  }
+
+  body.markdown-mode #screen {
+    display: none;
+  }
+
+  body.markdown-mode .markdown {
+    display: block;
+  }
+
+  .markdown > *:first-child {
+    margin-top: 0;
+  }
+
+  .markdown h1,
+  .markdown h2,
+  .markdown h3,
+  .markdown h4,
+  .markdown h5,
+  .markdown h6 {
+    margin: 1.35em 0 0.55em;
+    line-height: 1.25;
+    color: #ffffff;
+  }
+
+  .markdown h1 {
+    font-size: 26px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+  }
+
+  .markdown h2 {
+    font-size: 21px;
+  }
+
+  .markdown h3 {
+    font-size: 18px;
+  }
+
+  .markdown p,
+  .markdown ul,
+  .markdown ol,
+  .markdown blockquote,
+  .markdown pre {
+    margin: 0.75em 0;
+  }
+
+  .markdown ul,
+  .markdown ol {
+    padding-left: 1.5em;
+  }
+
+  .markdown blockquote {
+    border-left: 2px solid #777777;
+    color: var(--soft);
+    padding-left: 14px;
+  }
+
+  .markdown code {
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 1px 4px;
+  }
+
+  .markdown pre {
+    height: auto;
+    white-space: pre-wrap;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 12px;
+  }
+
+  .markdown pre code {
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .markdown a {
+    color: #ffffff;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 1em;
+    margin-left: 2px;
+    background: var(--fg);
+    vertical-align: -2px;
+    animation: blink 1s steps(2, start) infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<main class="terminal">
+  <header class="bar">
+    <span id="dot" class="dot"></span>
+    <span id="title" class="title">Alice Terminal Stream</span>
+    <span id="status" class="status">connecting</span>
+  </header>
+  <section class="viewport">
+    <pre id="screen"></pre>
+    <article id="markdown" class="markdown"></article>
+  </section>
+</main>
+
+<script type="module">
+import { renderMarkdown } from "/src/ui/brain-ui/markdown.js";
+
+(() => {
+  const params = new URLSearchParams(location.search);
+  const streamId = params.get("stream_id") || "default";
+  const screen = document.getElementById("screen");
+  const markdownEl = document.getElementById("markdown");
+  const titleEl = document.getElementById("title");
+  const statusEl = document.getElementById("status");
+  const dotEl = document.getElementById("dot");
+  let cursor = null;
+  let format = "plain";
+  let chunks = [];
+  let renderQueued = false;
+
+  function setStatus(text, live) {
+    statusEl.textContent = text;
+    dotEl.classList.toggle("live", !!live);
+  }
+
+  function isMarkdownFormat(value) {
+    return String(value || "").toLowerCase() === "markdown";
+  }
+
+  function setFormat(value) {
+    const next = isMarkdownFormat(value) ? "markdown" : "plain";
+    if (format === next) return;
+    format = next;
+    document.body.classList.toggle("markdown-mode", format === "markdown");
+    queueMarkdownRender();
+  }
+
+  function ensureCursor() {
+    if (!cursor) {
+      cursor = document.createElement("span");
+      cursor.className = "cursor";
+    }
+    if (cursor.parentNode !== screen) screen.appendChild(cursor);
+  }
+
+  function scrollBottom() {
+    screen.scrollTop = screen.scrollHeight;
+    markdownEl.scrollTop = markdownEl.scrollHeight;
+  }
+
+  function chunkText(chunk) {
+    return String(chunk?.text || "") + (chunk?.newline === false ? "" : "\n");
+  }
+
+  function markdownSource() {
+    return chunks
+      .filter(chunk => !chunk.level || chunk.level === "info")
+      .map(chunkText)
+      .join("");
+  }
+
+  function queueMarkdownRender() {
+    if (format !== "markdown" || renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => {
+      renderQueued = false;
+      markdownEl.innerHTML = renderMarkdown(markdownSource());
+      scrollBottom();
+    });
+  }
+
+  function appendText(text, newline, level) {
+    chunks.push({ text: String(text || ""), newline: newline !== false, level: level || "info" });
+    if (cursor && cursor.parentNode) cursor.remove();
+    screen.appendChild(document.createTextNode(String(text || "")));
+    if (newline !== false) screen.appendChild(document.createTextNode("\n"));
+    ensureCursor();
+    queueMarkdownRender();
+    scrollBottom();
+  }
+
+  function clearScreen() {
+    screen.textContent = "";
+    markdownEl.textContent = "";
+    chunks = [];
+    cursor = null;
+    ensureCursor();
+  }
+
+  function applyEvent(data) {
+    if (!data || data.stream_id !== streamId) return;
+    if (data.format) setFormat(data.format);
+    if (data.title) {
+      titleEl.textContent = data.title;
+      document.title = data.title;
+    }
+    if (data.action === "clear") {
+      clearScreen();
+      return;
+    }
+    if (data.action === "write") {
+      appendText(data.text || "", data.newline, data.level);
+      return;
+    }
+    if (data.action === "close") {
+      setStatus("closed", false);
+      appendText("[stream closed]", true);
+      return;
+    }
+    if (data.action === "open") {
+      setStatus("live", true);
+      ensureCursor();
+    }
+  }
+
+  async function hydrate() {
+    try {
+      const res = await fetch(`/terminal-stream/history?stream_id=${encodeURIComponent(streamId)}`, { cache: "no-store" });
+      const data = await res.json();
+      if (data.title) {
+        titleEl.textContent = data.title;
+        document.title = data.title;
+      }
+      if (data.format) setFormat(data.format);
+      clearScreen();
+      for (const chunk of data.chunks || []) {
+        appendText(chunk.text || "", chunk.newline, chunk.level);
+      }
+      setStatus(data.closed ? "closed" : "live", !data.closed);
+    } catch (err) {
+      clearScreen();
+      appendText(`[history unavailable] ${err.message || err}`, true);
+      setStatus("offline", false);
+    }
+  }
+
+  function connectEvents() {
+    const source = new EventSource("/events");
+    source.onopen = () => setStatus("live", true);
+    source.onerror = () => setStatus("reconnecting", false);
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data || "{}");
+        if (payload.type === "terminal_stream") applyEvent(payload.data);
+      } catch {}
+    };
+  }
+
+  hydrate().then(connectEvents);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,425 @@
+{
+  "name": "alice",
+  "productName": "Alice",
+  "version": "2.2.120",
+  "description": "A continuously running digital consciousness framework",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "author": {
+    "name": "xiaoyuanda666-ship-it"
+  },
+  "scripts": {
+    "start": "chcp 65001 >nul && electron .",
+    "start:lan": "powershell -ExecutionPolicy Bypass -File scripts/start-lan.ps1 app",
+    "start:backend": "chcp 65001 >nul && node --env-file=.env src/index.js",
+    "start:backend:lan": "powershell -ExecutionPolicy Bypass -File scripts/start-lan.ps1 backend",
+    "dev": "chcp 65001 >nul && node --env-file=.env --watch src/index.js",
+    "build": "node scripts/check-native-dependency-versions.mjs && node scripts/prebuild-clean.mjs && node scripts/prepare-playwright-browsers.mjs && node scripts/prepare-node-runtime.mjs && node scripts/build-macos-speech.mjs && node ./node_modules/@electron/rebuild/lib/cli.js -f -w better-sqlite3 -v 33.4.11 && node ./node_modules/electron-builder/cli.js",
+    "build:win": "node scripts/build-win.mjs",
+    "build:win:release": "node scripts/build-win.mjs --require-signing",
+    "build:linux": "node scripts/build-linux.mjs",
+    "build:mac": "node scripts/build-mac.mjs",
+    "build:mac:no-notarize": "node scripts/build-mac.mjs --no-notarize",
+    "build:mac:x64": "node scripts/build-mac.mjs x64",
+    "build:mac:arm64": "node scripts/build-mac.mjs arm64",
+    "build:mac:universal-speech": "node scripts/build-macos-speech.mjs universal --required",
+    "upload:mac": "node scripts/publish-mac-updates.mjs",
+    "upload:mac:dry-run": "node scripts/publish-mac-updates.mjs --dry-run --skip-smoke",
+    "release:mac": "node scripts/build-mac.mjs && node scripts/publish-mac-updates.mjs",
+    "release:ui": "node tools/release-console/server.mjs",
+    "release:ui:test": "node --test tools/release-console/test/*.test.mjs",
+    "upload:win": "node scripts/publish-win-updates.mjs",
+    "upload:win:dry-run": "node scripts/publish-win-updates.mjs --dry-run --skip-smoke",
+    "release:win": "node scripts/build-win.mjs --require-signing && node scripts/publish-win-updates.mjs",
+    "upload:linux": "node scripts/publish-linux-updates.mjs",
+    "upload:linux:dry-run": "node scripts/publish-linux-updates.mjs --dry-run --skip-smoke",
+    "release:linux": "node scripts/build-linux.mjs && node scripts/publish-linux-updates.mjs",
+    "publish": "node scripts/check-native-dependency-versions.mjs && node scripts/prebuild-clean.mjs && node scripts/prepare-playwright-browsers.mjs && node scripts/prepare-node-runtime.mjs && node scripts/build-macos-speech.mjs && node ./node_modules/@electron/rebuild/lib/cli.js -f -w better-sqlite3 -v 33.4.11 && node ./node_modules/electron-builder/cli.js --publish always",
+    "postinstall": "node ./node_modules/electron-builder/cli.js install-app-deps",
+    "test:rule-context": "electron ./src/test-rule-context.js",
+    "test:i18n": "node ./src/test-i18n.js",
+    "test:brain-ui-tools": "node ./src/test-brain-ui-tool-descriptions.js",
+    "test:hotspot-earth": "node ./src/test-hotspot-earth-lifecycle.js",
+    "test:information-subscriptions": "electron ./src/test-information-subscriptions.js",
+    "test:device-information": "node ./src/test-device-information.js",
+    "test:complex-task": "electron ./src/test-complex-task.js",
+    "test:relevance": "electron ./src/test-relevance-selection.js",
+    "test:section-gate": "node ./src/test-section-gate.js",
+    "test:tick-policy": "node ./src/test-tick-policy.js",
+    "test:failed-outbound-dedupe": "node ./src/test-failed-outbound-dedupe.js",
+    "test:consciousness-loop": "node ./src/test-consciousness-loop.js",
+    "test:reminder-runs": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-reminder-runs.js\"",
+    "test:scheduled-tasks": "node ./src/test-scheduled-tasks.js",
+    "test:runtime-managers": "node ./src/test-index-refactor-modules.js",
+    "test:startup-hardening": "node ./src/test-startup-hardening.js && node ./src/test-clawbot-startup.js && node ./src/test-weather-fallback.js",
+    "test:agent-skills": "node ./src/test-agent-skills.js",
+    "test:ask-user-question": "node ./src/test-ask-user-question.js",
+    "test:sandbox-policy": "node ./src/test-sandbox-policy.js",
+    "test:subagents": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-subagents.js\"",
+    "test:workflow": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-workflow.js\"",
+    "test:goals": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-goals.js\"",
+    "test:goal-total-rounds": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-goal-total-rounds.js\"",
+    "test:goal-banner-wiring": "node ./src/test-goal-banner-wiring.js",
+    "test:compaction": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-compaction.js\"",
+    "test:plan-mode": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-plan-mode.js\"",
+    "test-recurrence": "node ./src/test-recurrence.js",
+    "test:schedule": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-schedule.js\"",
+    "test:tool-factory": "node ./src/test-tool-factory.js",
+    "test:filesystem-edit": "node ./src/test-filesystem-edit.js",
+    "test:mcp-client": "node ./src/test-mcp-client.js",
+    "test:api-message-utf8": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-api-message-utf8.js\"",
+    "test:strict-evaluation": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-strict-evaluation.js\"",
+    "test:browser-challenge": "node ./src/test-browser-challenge-guard.js",
+    "test:no-fake-detection": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-no-fake-tool-detection.js\"",
+    "test:config-upgrade": "node ./src/test-config-upgrade.js",
+    "test:llm-responses": "node ./src/test-llm-responses.js && node ./src/test-llm-responses-loop.js",
+    "test:media-modules": "node ./src/test-media-modules.js",
+    "test:chat-resources": "electron ./src/test-chat-resources.js",
+    "test:db-schema-module": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-db-schema-module.js\"",
+    "test:activation-intro": "node ./src/test-activation-intro-gate.js",
+    "test:voice-continuous": "node ./src/test-voice-continuous.js",
+    "test:voice-ptt": "node ./src/test-voice-ptt.js",
+    "test:voice-reply-routing": "node ./src/test-voice-reply-routing.js",
+    "test:macos-speech-permissions": "node ./src/test-macos-speech-permissions.js",
+    "test:websocket-security": "node ./src/test-websocket-security.js",
+    "test:lan-api-client": "node ./src/test-lan-api-client.js",
+    "test:lan-access": "node ./src/test-lan-access.js",
+    "test:multi-client-chat": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-multi-client-chat.js\"",
+    "test:web-access": "node ./src/test-web-read.js && node ./src/test-web-search.js",
+    "test:chrome-devtools": "node ./src/mcp/test-chrome-devtools-server.js && node ./electron/test-alice-chrome.cjs",
+    "test:browser-packaging": "node ./scripts/test-playwright-packaging.mjs",
+    "test:windows-build": "node ./scripts/test-windows-build.mjs",
+    "test:linux-build": "node ./scripts/test-linux-build.mjs",
+    "test:update-publish": "node ./scripts/test-macos-updater-config.mjs && node ./scripts/test-publish-updates.mjs",
+    "test:native-deps": "node ./scripts/test-native-dependency-versions.mjs",
+    "test:browser-core": "node ./src/test-web-url-policy.js && node ./src/mcp/test-chrome-devtools-server.js && node ./electron/test-alice-chrome.cjs && node ./src/test-browser-display.js && node ./src/test-browser-agent-integration.js && node ./src/test-browser-challenge-guard.js && node ./src/test-web-read.js && node ./src/test-web-search.js",
+    "test:network-audit": "node ./electron/test-network-audit-utils.cjs && node ./electron/test-network-diagnostics.cjs && node ./scripts/test-compare-network-captures.mjs",
+    "test:network-audit:real": "electron ./electron/test-network-diagnostics-real.cjs",
+    "network-audit:compare": "node ./scripts/compare-network-captures.mjs",
+    "network-audit:record-chrome": "node ./scripts/record-chrome-network.mjs",
+    "network-audit:record-alice": "electron ./electron/record-alice-network.cjs",
+    "test:browser-real": "electron ./electron/test-browser-real-workflow.cjs",
+    "smoke:mac-artifacts": "node ./scripts/smoke-mac-artifacts.mjs",
+    "smoke:win-artifacts": "node ./scripts/smoke-win-artifacts.mjs",
+    "smoke:linux-artifacts": "node ./scripts/smoke-linux-artifacts.mjs",
+    "repair:memories:dry": "electron ./scripts/repair-memory-quality.js",
+    "repair:memories": "electron ./scripts/repair-memory-quality.js --apply",
+    "probe:config-upgrade": "node ./scripts/probe-config-upgrade.mjs",
+    "smoke:tools": "node scripts/smoke-tools.mjs",
+    "smoke:tool-factory-web": "node scripts/smoke-tool-factory-web-e2e.mjs",
+    "smoke:brain-ui": "node scripts/smoke-brain-ui.mjs",
+    "smoke:social": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\scripts\\smoke-social.mjs\"",
+    "smoke:feishu-ws": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\scripts\\smoke-feishu-ws.mjs\"",
+    "test:worktree": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-worktree.js\"",
+    "test:worktree-panel": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-worktree-panel.js\"",
+    "test:compaction-panel": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-compaction-panel.js\"",
+    "test:workflow-panel": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-workflow-panel.js\"",
+    "test:plugin-host": "node ./src/test-plugin-host.js",
+    "test:plugin-ui": "node ./src/test-plugin-ui.js",
+    "test:headless": "node ./src/test-headless.js",
+    "headless": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\headless.js\"",
+    "test:present": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-present.js\"",
+    "test:office": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-office.js\"",
+    "test:github-webhook": "node ./src/test-github-webhook.js",
+    "test:github-webhook-http": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-github-webhook-http.js\"",
+    "test:agent-hooks": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-agent-hooks.js\"",
+    "test:office-fallback": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-office-fallback.js\"",
+    "test:stdio-protocol": "node ./src/test-stdio-protocol.js",
+    "stdio": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\stdio.js\"",
+    "test:schedule-preview": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-schedule-preview.js\"",
+    "test:session-delete-date": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ELECTRON_RUN_AS_NODE='1'; .\\node_modules\\.bin\\electron.cmd .\\src\\test-session-delete-date.js\""
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "@larksuiteoapi/node-sdk": "^1.68.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@playwright/mcp": "0.0.78",
+    "better-sqlite3": "12.8.0",
+    "chrome-devtools-mcp": "1.6.0",
+    "d3": "^7.9.0",
+    "electron-updater": "^6.3.9",
+    "jsdom": "^30.1.1",
+    "node-forge": "^1.4.0",
+    "openai": "^6.34.0",
+    "qrcode": "^1.5.4",
+    "sherpa-onnx-node": "^1.13.3",
+    "ssh2": "^1.17.0",
+    "undici": "^6.25.0",
+    "wechat-ilink-client": "^0.1.0",
+    "ws": "^8.20.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "electron": "33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.xiaoyuanda.alice",
+    "productName": "Alice",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "npmRebuild": false,
+    "asar": {
+      "smartUnpack": false
+    },
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+      "**/node_modules/chrome-devtools-mcp/**",
+      "**/node_modules/@huggingface/transformers/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/sharp-*/**",
+      "**/node_modules/onnxruntime-node/**",
+      "**/node_modules/sherpa-onnx-node/**",
+      "**/node_modules/sherpa-onnx-win-x64/**",
+      "**/node_modules/sherpa-onnx-darwin-x64/**",
+      "**/node_modules/sherpa-onnx-darwin-arm64/**",
+      "**/node_modules/sherpa-onnx-linux-x64/**",
+      "build/native-speech-recognizer",
+      "src/voice/**"
+    ],
+    "extraResources": [
+      {
+        "from": "build/playwright-browsers/${os}-${arch}",
+        "to": "playwright-browsers",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "build/node-runtime/${os}-${arch}",
+        "to": "node-runtime",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "skills/**/*",
+      "scripts/seed-memories.js",
+      "index.html",
+      "dashboard.html",
+      "brain.html",
+      "brain-ui.html",
+      "website.html",
+      "systemPrompt.html",
+      "activation.html",
+      "focus-banner.html",
+      "turn-trace.html",
+      "build/icon.ico",
+      "build/icon.icns",
+      "build/icon.png",
+      "build/icon-mac-cartoon.png",
+      "build/native-speech-recognizer",
+      "music/**/*",
+      "package.json",
+      "!**/*.map",
+      "!src/test-*",
+      "!src/**/test-*",
+      "!electron/test-*",
+      "!electron/network-diagnostics.cjs",
+      "!electron/record-alice-network.cjs",
+      "!src/mcp/playwright-server.js",
+      "!scripts/smoke-*.mjs",
+      "!src/**/__pycache__/**",
+      "!src/**/*.pyc",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,*.d.ts}",
+      "!**/node_modules/better-sqlite3/build/Release/test_extension.node",
+      "!**/node_modules/.cache",
+      "!**/.vscode",
+      "!data/**/*"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "files": [
+        "electron/**/*",
+        "src/**/*",
+        "skills/**/*",
+        "scripts/seed-memories.js",
+        "index.html",
+        "dashboard.html",
+        "brain.html",
+        "brain-ui.html",
+        "website.html",
+        "systemPrompt.html",
+        "activation.html",
+        "focus-banner.html",
+        "turn-trace.html",
+        "build/icon.ico",
+        "music/**/*",
+        "package.json",
+        "!**/*.map",
+        "!src/test-*",
+        "!src/**/test-*",
+        "!electron/test-*",
+        "!electron/network-diagnostics.cjs",
+        "!electron/record-alice-network.cjs",
+        "!src/mcp/playwright-server.js",
+        "!scripts/smoke-*.mjs",
+        "!src/**/__pycache__/**",
+        "!src/**/*.pyc",
+        "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,*.d.ts}",
+        "!**/node_modules/better-sqlite3/build/Release/test_extension.node",
+        "!**/node_modules/.cache",
+        "!**/.vscode",
+        "!.dev-test/**/*",
+        "!sandbox/**/*",
+        "!data/**/*",
+        "!images/**/*",
+        "!**/node_modules/onnxruntime-node/bin/napi-v3/darwin/**/*",
+        "!**/node_modules/onnxruntime-node/bin/napi-v3/linux/**/*",
+        "!**/node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**/*",
+        "!**/node_modules/sherpa-onnx-darwin-*/**/*",
+        "!**/node_modules/sherpa-onnx-linux-*/**/*",
+        "!build/native-speech-recognizer"
+      ],
+      "asarUnpack": [
+        "**/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+        "**/node_modules/chrome-devtools-mcp/**",
+        "**/node_modules/@huggingface/transformers/**",
+        "**/node_modules/sharp/**",
+        "**/node_modules/@img/sharp-win32-x64/**",
+        "**/node_modules/onnxruntime-node/**",
+        "**/node_modules/sherpa-onnx-node/**",
+        "**/node_modules/sherpa-onnx-win-x64/**",
+        "src/voice/**",
+        "!build/native-speech-recognizer"
+      ],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "installerHeaderIcon": "build/installerHeaderIcon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Alice"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "identity": "Yuanda Xiao (XD5VMPN37G)",
+      "forceCodeSigning": true,
+      "hardenedRuntime": true,
+      "timestamp": "http://timestamp.apple.com/ts01",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "signIgnore": [
+        "playwright-browsers/.+\\.(pak|dat|bin|strings)$"
+      ],
+      "binaries": [
+        "Contents/Resources/app.asar.unpacked/build/native-speech-recognizer",
+        "Contents/Resources/node-runtime/node"
+      ],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Alice uses the microphone for voice input when you enable voice features.",
+        "NSSpeechRecognitionUsageDescription": "Alice may use speech recognition for voice input features.",
+        "NSAppleEventsUsageDescription": "Alice uses Apple Events only when you ask it to read or control playback in Music.app."
+      },
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "files": [
+        "!**/node_modules/onnxruntime-node/bin/napi-v3/darwin/**/*",
+        "!**/node_modules/onnxruntime-node/bin/napi-v3/win32/**/*",
+        "!**/node_modules/sherpa-onnx-darwin-*/**/*",
+        "!**/node_modules/sherpa-onnx-win-*/**/*",
+        "!build/native-speech-recognizer"
+      ],
+      "asarUnpack": [
+        "**/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+        "**/node_modules/chrome-devtools-mcp/**",
+        "**/node_modules/@huggingface/transformers/**",
+        "**/node_modules/sharp/**",
+        "**/node_modules/@img/sharp-linux-x64/**",
+        "**/node_modules/onnxruntime-node/**",
+        "**/node_modules/sherpa-onnx-node/**",
+        "**/node_modules/sherpa-onnx-linux-x64/**",
+        "src/voice/**",
+        "!build/native-speech-recognizer"
+      ],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
+    },
+    "dmg": {
+      "sign": false,
+      "title": "${productName} ${version}-${arch}",
+      "backgroundColor": "#202a2f",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 130,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.bailongma.ai/stable/${os}/${arch}",
+        "channel": "latest"
+      }
+    ],
+    "afterPack": "./scripts/after-pack-macos.mjs",
+    "afterSign": "./scripts/after-sign-macos.mjs",
+    "afterAllArtifactBuild": "./scripts/after-all-artifacts-macos.mjs"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.8.0": true,
+    "electron@33.4.11": true,
+    "onnxruntime-node@1.21.0": true,
+    "protobufjs@7.6.4": true,
+    "sharp@0.34.5": true
+  }
+}

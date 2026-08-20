@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Alice 语音球</title>
+<style>
+  /* 透明置顶小窗(屏幕正上方居中):点阵球 + 球下实时识别文字。
+     出/退场是包裹层的 opacity+scale 过渡(决策 C)。 */
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  #orb-wrap {
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding-top: 6px; box-sizing: border-box;
+    opacity: 0;
+    transform: scale(0.6) translateY(-8px);
+    transform-origin: top center;
+    transition: opacity 0.28s cubic-bezier(0.2, 0.7, 0.2, 1),
+                transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+    will-change: opacity, transform;
+  }
+  #orb-wrap.visible { opacity: 1; transform: scale(1) translateY(0); }
+  #orb-canvas { width: 264px; height: 264px; display: block; }
+  /* 识别文字:半透明深色胶囊,衬在透明窗上保证可读;最多两行,超出渐隐截断 */
+  #orb-text {
+    margin-top: 4px;
+    max-width: 440px;
+    padding: 7px 16px;
+    border-radius: 16px;
+    background: rgba(14, 16, 22, 0.62);
+    backdrop-filter: blur(8px);
+    color: rgba(238, 244, 255, 0.96);
+    font: 500 15px/1.45 -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    text-align: center;
+    letter-spacing: 0.2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    pointer-events: none;
+  }
+  #orb-text.show { opacity: 1; transform: translateY(0); }
+  /* "思考中"用稍弱的字重+柔光,与识别文字区分 */
+  #orb-text.thinking { color: rgba(214, 200, 255, 0.95); font-style: normal; }
+</style>
+</head>
+<body>
+<div id="orb-wrap">
+  <canvas id="orb-canvas"></canvas>
+  <div id="orb-text"></div>
+</div>
+<script type="module">
+  // 悬浮语音球的「脸」:复用 voice-core 的点阵球渲染(不开麦、不连 ASR)。
+  // 真正的开麦/识别/对话/TTS 在主窗口跑;主窗口每帧把 {状态 sk, 真实音量 vol} + 识别文字
+  // 经 IPC 推过来,本窗口注入 voice-core(setStatus + setExternalVol)→ 球的跳动与 brain-ui 一致。
+  import { createVoiceCore } from './voice-core.js';
+
+  const wrap = document.getElementById('orb-wrap');
+  const canvas = document.getElementById('orb-canvas');
+  const textEl = document.getElementById('orb-text');
+  const core = createVoiceCore({ canvas }); // 只用渲染部分
+
+  let exiting = false;
+  let curText = '';
+
+  function setText(text, thinking) {
+    if (text === curText && (textEl.classList.contains('thinking') === !!thinking)) return;
+    curText = text;
+    textEl.classList.toggle('thinking', !!thinking);
+    if (text) {
+      textEl.textContent = text;
+      textEl.classList.add('show');
+    } else {
+      textEl.classList.remove('show');
+    }
+  }
+
+  function enter() {
+    exiting = false;
+    setText('', false);
+    core.setExternalVol(0);
+    core.setStatus('listening');
+    core.startRenderLoop();
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('visible')));
+  }
+
+  function exit() {
+    if (exiting) return;
+    exiting = true;
+    setText('', false);
+    wrap.classList.remove('visible');
+  }
+
+  wrap.addEventListener('transitionend', (e) => {
+    if (e.target !== wrap || e.propertyName !== 'opacity') return;
+    if (!wrap.classList.contains('visible')) {
+      core.stopRenderLoop();
+      try { window.voiceOrb?.exitDone(); } catch {}
+    }
+  });
+
+  window.voiceOrb?.onCommand((cmd, payload) => {
+    if (cmd === 'enter') { enter(); }
+    else if (cmd === 'frame') {
+      if (exiting || !payload) return;
+      if (payload.sk) core.setStatus(payload.sk);
+      core.setExternalVol(payload.vol || 0);
+    }
+    else if (cmd === 'text') {
+      if (exiting) return;
+      setText((payload && payload.text) || '', !!(payload && payload.thinking));
+    }
+    else if (cmd === 'exit') { exit(); }
+  });
+</script>
+</body>
+</html>

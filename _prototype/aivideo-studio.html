@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 视频生成工作台 · 原型</title>
+<style>
+  :root{
+    --bg-deep:#060a10; --bg0:#080d14; --bg1:#0c131c;
+    --ink:#d7e2ee; --ink2:#9aabbe; --dim:#5b6b7e;
+    --line:rgba(138,168,200,.10); --line-strong:rgba(138,168,200,.22);
+    --cyan:#4dd0e1; --blue:#7c9bff; --bad:#ff8a80;
+    --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:radial-gradient(120% 100% at 80% 0%,#0a1019 0%,var(--bg-deep) 60%);
+    color:var(--ink); font-family:var(--sans); overflow:hidden;
+    display:flex;
+  }
+  /* —— 左侧：被推开的 app 背景（聊天/图谱）暗示 —— */
+  .app-hint{
+    flex:0 0 32%; min-width:0; position:relative; padding:26px 22px;
+    opacity:.34; filter:saturate(.7); user-select:none; pointer-events:none;
+    -webkit-mask-image:linear-gradient(90deg,#000 60%,transparent);
+  }
+  .app-hint .dotgraph{position:absolute; inset:0; opacity:.5;
+    background:
+      radial-gradient(2px 2px at 20% 30%,var(--cyan) 40%,transparent),
+      radial-gradient(2px 2px at 60% 50%,var(--blue) 40%,transparent),
+      radial-gradient(2px 2px at 40% 70%,var(--ink2) 40%,transparent),
+      radial-gradient(1.5px 1.5px at 75% 25%,var(--ink2) 40%,transparent),
+      radial-gradient(1.5px 1.5px at 30% 85%,var(--cyan) 40%,transparent);
+  }
+  .app-hint .bubble{margin:0 0 12px; padding:10px 13px; border-radius:12px;
+    background:var(--bg1); border:1px solid var(--line); font-size:12.5px; color:var(--ink2); max-width:80%}
+  .app-hint .bubble.me{margin-left:auto; background:#10202a; color:var(--ink)}
+
+  /* —— 右侧：AI 视频生成面板 —— */
+  .panel{
+    flex:1 1 auto; margin:14px 14px 14px 0; min-width:0;
+    background:color-mix(in srgb,var(--bg-deep) 92%,black);
+    border:1px solid var(--line-strong); border-radius:16px;
+    display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:0 24px 80px rgba(0,0,0,.5);
+  }
+  .head{
+    flex:0 0 auto; height:48px; padding:0 12px 0 18px;
+    display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--line);
+  }
+  .head .title{font-family:var(--mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink2)}
+  .head .spacer{flex:1}
+  .head button{
+    font-family:var(--mono); font-size:11px; letter-spacing:.06em;
+    color:var(--ink2); background:none; border:1px solid var(--line-strong);
+    border-radius:7px; padding:5px 10px; cursor:pointer; transition:.15s;
+  }
+  .head button:hover{color:var(--ink); border-color:var(--ink2)}
+  .head .close{border:0; font-size:17px; padding:3px 8px}
+
+  /* —— 区 1：生成栏 —— */
+  .queue-wrap{flex:0 0 auto; border-bottom:1px solid var(--line); background:var(--bg0)}
+  .queue-cap{font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--dim); padding:9px 16px 2px}
+  .queue{display:flex; gap:10px; overflow-x:auto; padding:6px 16px 14px; scrollbar-width:thin}
+  .queue::-webkit-scrollbar{height:6px}
+  .queue::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:6px}
+  .tile{
+    flex:0 0 auto; width:148px; cursor:pointer; position:relative;
+  }
+  .tile .frame{
+    width:148px; height:84px; border-radius:9px; overflow:hidden; position:relative;
+    border:1px solid var(--line-strong); background:#0a0f16;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .tile.sel .frame{border-color:var(--cyan); box-shadow:0 0 0 1px var(--cyan), 0 0 18px -4px var(--cyan)}
+  .tile .poster{position:absolute; inset:0}
+  .tile .dur{position:absolute; right:5px; bottom:5px; font-family:var(--mono); font-size:9.5px;
+    padding:1px 5px; border-radius:5px; background:rgba(0,0,0,.6); color:var(--ink)}
+  .tile .play{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:#fff; opacity:0; transition:.18s; font-size:20px; text-shadow:0 1px 6px rgba(0,0,0,.6)}
+  .tile:hover .play{opacity:.95}
+  .tile .label{margin-top:6px; font-size:11px; color:var(--ink2); line-height:1.35;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+  /* generating */
+  .tile.gen .frame{background:linear-gradient(120deg,#0a121a,#0d1722)}
+  .gen-orb{width:30px; height:30px; position:relative}
+  .gen-orb i{position:absolute; inset:0; border-radius:50%; border:2px solid transparent;
+    border-top-color:var(--cyan); border-right-color:var(--cyan); animation:spin 1.3s linear infinite}
+  .gen-orb i:nth-child(2){inset:6px; border-top-color:var(--blue); border-right-color:var(--blue); animation-duration:1.9s; animation-direction:reverse}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tile .genbadge{position:absolute; left:6px; top:6px; font-family:var(--mono); font-size:9px;
+    letter-spacing:.08em; color:var(--cyan); background:rgba(8,16,22,.7); padding:2px 6px; border-radius:5px}
+  .tile .gentime{position:absolute; right:6px; bottom:6px; font-family:var(--mono); font-size:10px; color:var(--ink2)}
+  .tile.gen .frame::after{content:""; position:absolute; left:-40%; top:0; height:100%; width:40%;
+    background:linear-gradient(90deg,transparent,rgba(77,208,225,.18),transparent); animation:sweep 1.6s ease-in-out infinite}
+  @keyframes sweep{0%{left:-40%}100%{left:100%}}
+  /* failed */
+  .tile.fail .frame{background:repeating-linear-gradient(45deg,#160f12,#160f12 8px,#1b1216 8px,#1b1216 16px); border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+  .tile.fail .frame .x{color:var(--bad); font-size:20px}
+  .tile.fail .label{color:var(--bad)}
+
+  /* —— 区 2：播放区 —— */
+  .player{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; padding:16px 18px;
+    align-items:center; justify-content:center; gap:12px}
+  .stage{position:relative; width:min(100%,860px); aspect-ratio:16/9; border-radius:14px; overflow:hidden;
+    border:1px solid var(--line-strong); background:#000; display:flex; align-items:center; justify-content:center}
+  .stage .poster{position:absolute; inset:0}
+  .stage .grid{position:absolute; inset:0; opacity:.12; pointer-events:none;
+    background:linear-gradient(transparent 95%,rgba(255,255,255,.4) 95%) 0 0/100% 22px,
+              linear-gradient(90deg,transparent 95%,rgba(255,255,255,.4) 95%) 0 0/22px 100%}
+  .stage .bigplay{position:relative; width:64px; height:64px; border-radius:50%;
+    background:rgba(6,12,18,.55); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,.25);
+    display:flex; align-items:center; justify-content:center; color:#fff; font-size:24px; cursor:pointer; transition:.18s}
+  .stage .bigplay:hover{background:rgba(6,12,18,.8); transform:scale(1.06)}
+  .stage .dl{position:absolute; top:12px; right:12px; z-index:3; font-family:var(--mono); font-size:11px;
+    letter-spacing:.05em; color:var(--ink); background:rgba(8,14,20,.7); border:1px solid var(--line-strong);
+    border-radius:8px; padding:6px 12px; cursor:pointer; transition:.15s}
+  .stage .dl:hover{border-color:var(--cyan); color:var(--cyan)}
+  .stage .empty{color:var(--dim); font-family:var(--mono); font-size:12px; letter-spacing:.1em}
+  .player .meta{font-family:var(--mono); font-size:11px; letter-spacing:.08em; color:var(--ink2)}
+  .player .meta b{color:var(--cyan); font-weight:600}
+
+  /* —— 区 3：输入区 —— */
+  .composer{flex:0 0 auto; border-top:1px solid var(--line); padding:14px 16px 16px; background:var(--bg0)}
+  .dropzone{display:flex; gap:9px; align-items:stretch; margin-bottom:10px}
+  .imgcell{position:relative; width:66px; height:66px; border-radius:10px; overflow:hidden; flex:0 0 auto;
+    border:1px solid var(--line-strong)}
+  .imgcell .poster{position:absolute; inset:0}
+  .imgcell .role{position:absolute; left:0; right:0; bottom:0; font-family:var(--mono); font-size:9px;
+    letter-spacing:.04em; text-align:center; color:#06121a; background:linear-gradient(90deg,var(--cyan),var(--blue)); padding:2px 0}
+  .imgcell .rm{position:absolute; top:2px; right:2px; width:17px; height:17px; border-radius:50%; border:0;
+    background:rgba(0,0,0,.65); color:#fff; font-size:12px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center}
+  .addcell{width:66px; height:66px; border-radius:10px; flex:0 0 auto; cursor:pointer;
+    border:1px dashed var(--line-strong); color:var(--ink2); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:3px; font-size:11px; text-align:center; transition:.15s; background:transparent}
+  .addcell:hover,.dropzone.dragover .addcell{border-color:var(--cyan); color:var(--cyan); background:color-mix(in srgb,var(--cyan) 8%,transparent)}
+  .addcell .plus{font-size:18px; line-height:1}
+  .addcell small{font-size:8.5px; color:var(--dim); letter-spacing:.02em}
+  .modebar{display:flex; align-items:center; gap:10px; margin-bottom:9px; min-height:18px}
+  .modetag{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--cyan); border:1px solid color-mix(in srgb,var(--cyan) 40%,transparent); padding:2px 8px; border-radius:6px}
+  .modetag.tot{color:var(--blue); border-color:color-mix(in srgb,var(--blue) 45%,transparent)}
+  .modehint{font-size:11px; color:var(--dim)}
+  textarea#prompt{width:100%; min-height:62px; resize:none; overflow:hidden; display:block;
+    border:1px solid var(--line-strong);
+    border-radius:12px; background:color-mix(in srgb,var(--bg-deep) 70%,black); color:var(--ink);
+    padding:11px 13px; font-size:13px; line-height:1.6; font-family:var(--sans); outline:none;
+    transition:border-color .15s}
+  textarea#prompt:focus{border-color:var(--cyan)}
+  textarea#prompt::placeholder{color:var(--dim)}
+  .controls{display:flex; align-items:center; gap:8px; margin-top:10px}
+  .controls select{background:color-mix(in srgb,var(--bg-deep) 70%,black); color:var(--ink2);
+    border:1px solid var(--line-strong); border-radius:8px; padding:7px 9px; font-size:12px; font-family:var(--mono); outline:none; cursor:pointer}
+  .controls select:focus{border-color:var(--cyan)}
+  .gen-btn{margin-left:auto; flex:0 0 auto; border:0; border-radius:9px; padding:9px 26px; cursor:pointer;
+    font-size:13px; font-weight:600; letter-spacing:.12em; color:#06121a;
+    background:linear-gradient(90deg,var(--cyan),var(--blue)); transition:.15s}
+  .gen-btn:hover{filter:brightness(1.06)}
+  .gen-btn:active{transform:translateY(1px)}
+  .err{color:var(--bad); font-size:11.5px; margin-top:8px; min-height:14px}
+
+  /* toast */
+  .toast{position:fixed; left:50%; bottom:26px; transform:translate(-50%,16px); opacity:0; pointer-events:none;
+    background:#0c1620; border:1px solid var(--line-strong); border-left:3px solid var(--cyan);
+    color:var(--ink); font-size:12.5px; padding:11px 16px; border-radius:10px; max-width:540px; transition:.28s; z-index:50;
+    box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+  .toast .mono{font-family:var(--mono); color:var(--cyan); font-size:11.5px}
+</style>
+</head>
+<body>
+  <!-- 左侧被推开的 app 暗示 -->
+  <aside class="app-hint">
+    <div class="dotgraph"></div>
+    <div class="bubble me">打开 AI 视频生成模式</div>
+    <div class="bubble">好，面板开了 👇 在右边填提示词或拖张图就能生成。</div>
+    <div class="bubble me">生成一段赛博朋克城市夜景</div>
+  </aside>
+
+  <!-- AI 视频生成面板 -->
+  <section class="panel">
+    <header class="head">
+      <div class="title">AI 视频生成</div>
+      <div class="spacer"></div>
+      <button id="newBtn">+ 新视频</button>
+      <button class="close" id="closeBtn">×</button>
+    </header>
+
+    <!-- 区1 生成栏 -->
+    <div class="queue-wrap">
+      <div class="queue-cap">生成栏 · Queue</div>
+      <div class="queue" id="queue"></div>
+    </div>
+
+    <!-- 区2 播放区 -->
+    <div class="player">
+      <div class="stage" id="stage">
+        <div class="empty" id="stageEmpty">选择上方任意已完成的视频播放</div>
+      </div>
+      <div class="meta" id="playerMeta"></div>
+    </div>
+
+    <!-- 区3 输入区 -->
+    <div class="composer">
+      <div class="dropzone" id="dropzone"></div>
+      <div class="modebar">
+        <span class="modetag" id="modeTag">文生视频</span>
+        <span class="modehint" id="modeHint">不加图 = 文生视频 · 1 张 = 图生视频 · 2 张 = 首尾帧</span>
+      </div>
+      <textarea id="prompt" placeholder="描述你想要的画面、动作、镜头运动、光线、风格…（Ctrl+Enter 生成）"></textarea>
+      <div class="controls">
+        <select id="ratio" title="比例"><option>16:9</option><option>9:16</option><option>1:1</option><option>4:3</option><option>3:4</option><option>21:9</option></select>
+        <select id="res" title="分辨率"><option>480p</option><option selected>720p</option><option>1080p</option></select>
+        <select id="dur" title="时长"><option value="5">5s</option><option value="10">10s</option><option value="15">15s</option></select>
+        <button class="gen-btn" id="genBtn">生成</button>
+      </div>
+      <div class="err" id="err"></div>
+    </div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+  <input type="file" id="fileInput" accept="image/*" hidden>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){return document.getElementById(id)};
+
+  // —— 海报色：给每个视频生成一个确定性的抽象渐变（代表 AI 生成帧）——
+  var HUES = [[190,255],[210,265],[170,230],[230,285],[160,210],[200,250]];
+  function poster(seed){
+    var h = HUES[seed % HUES.length];
+    return "radial-gradient(120% 120% at 25% 20%,hsl("+h[0]+" 70% 28%) 0%,hsl("+h[1]+" 65% 14%) 55%,#05080c 100%)";
+  }
+  function imgPoster(seed){
+    return "linear-gradient(135deg,hsl("+(40+seed*60%320)+" 55% 40%),hsl("+(180+seed*40%200)+" 50% 28%))";
+  }
+
+  // —— 状态 ——
+  var jobs = [];      // {id,status:'gen'|'done'|'fail',prompt,mode,res,ratio,dur,seed,start,err}
+  var selId = null;
+  var images = [];    // {id,src}  最多2
+  var seedSeq = 0, jobSeq = 0;
+
+  function modeOf(n){ return n===0?"text":(n===1?"image":"flf"); }
+  function modeLabel(m){ return m==="text"?"文生视频":(m==="image"?"图生视频":"首尾帧"); }
+
+  // ====== 输入区：加图（点击 / 拖拽 / 粘贴，最多 2 张）======
+  function renderDropzone(){
+    var dz=$("dropzone"); dz.innerHTML="";
+    images.forEach(function(im,i){
+      var cell=document.createElement("div"); cell.className="imgcell";
+      var p=document.createElement("div"); p.className="poster";
+      if(im.css) p.style.background=im.src; else p.style.background="center/cover no-repeat url('"+im.src+"')";
+      cell.appendChild(p);
+      var r=document.createElement("div"); r.className="role";
+      r.textContent = images.length===2 ? (i===0?"首帧":"尾帧") : "参考图";
+      cell.appendChild(r);
+      var rm=document.createElement("button"); rm.className="rm"; rm.textContent="×";
+      rm.onclick=function(e){e.stopPropagation(); images.splice(i,1); renderDropzone(); updateMode();};
+      cell.appendChild(rm);
+      dz.appendChild(cell);
+    });
+    if(images.length<2){
+      var add=document.createElement("div"); add.className="addcell";
+      add.innerHTML='<span class="plus">+</span><span>图片</span><small>点击/拖拽/粘贴</small>';
+      add.onclick=function(){ $("fileInput").click(); };
+      dz.appendChild(add);
+    }
+  }
+  function updateMode(){
+    var m = modeOf(images.length);
+    var tag=$("modeTag");
+    tag.textContent = modeLabel(m); tag.classList.toggle("tot", m==="flf");
+    $("modeHint").textContent = m==="text" ? "不加图 = 文生视频 · 1 张 = 图生视频 · 2 张 = 首尾帧"
+      : m==="image" ? "已加 1 张参考图 → 图生视频（再加 1 张即首尾帧）"
+      : "已加 2 张 → 首尾帧模式：第 1 张为「首帧」，第 2 张为「尾帧」";
+  }
+  // src 可为 dataURL/objectURL，或一个 css 渐变（演示占位）
+  function addImage(src){
+    if(images.length>=2) return false;
+    images.push({src:src, css: src.indexOf("gradient")>-1});
+    renderDropzone(); updateMode(); return true;
+  }
+
+  // 文件选择
+  $("fileInput").addEventListener("change", function(e){
+    var f=e.target.files && e.target.files[0]; if(!f) return;
+    var rd=new FileReader(); rd.onload=function(){ addImage(rd.result); }; rd.readAsDataURL(f);
+    e.target.value="";
+  });
+  // 拖拽
+  var dz=$("dropzone");
+  ["dragenter","dragover"].forEach(function(ev){ dz.addEventListener(ev,function(e){e.preventDefault(); dz.classList.add("dragover");});});
+  ["dragleave","drop"].forEach(function(ev){ dz.addEventListener(ev,function(e){e.preventDefault(); dz.classList.remove("dragover");});});
+  dz.addEventListener("drop", function(e){
+    var f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f && f.type.indexOf("image/")===0){ var rd=new FileReader(); rd.onload=function(){addImage(rd.result);}; rd.readAsDataURL(f); }
+  });
+  // 粘贴
+  document.addEventListener("paste", function(e){
+    var items=(e.clipboardData||window.clipboardData).items; if(!items) return;
+    for(var i=0;i<items.length;i++){
+      if(items[i].type.indexOf("image")===0){
+        var blob=items[i].getAsFile(); var rd=new FileReader();
+        rd.onload=function(){ addImage(rd.result); }; rd.readAsDataURL(blob);
+        e.preventDefault(); break;
+      }
+    }
+  });
+
+  // ====== 生成栏渲染 ======
+  function renderQueue(){
+    var q=$("queue"); q.innerHTML="";
+    jobs.forEach(function(j){
+      var t=document.createElement("div"); t.className="tile "+(j.status==="gen"?"gen":j.status==="fail"?"fail":"");
+      if(j.id===selId) t.classList.add("sel");
+      var fr=document.createElement("div"); fr.className="frame";
+      if(j.status==="done"){
+        var ps=document.createElement("div"); ps.className="poster"; ps.style.background=poster(j.seed); fr.appendChild(ps);
+        var pl=document.createElement("div"); pl.className="play"; pl.textContent="▶"; fr.appendChild(pl);
+        var d=document.createElement("div"); d.className="dur"; d.textContent=j.dur+"s"; fr.appendChild(d);
+      } else if(j.status==="gen"){
+        var orb=document.createElement("div"); orb.className="gen-orb"; orb.innerHTML="<i></i><i></i>"; fr.appendChild(orb);
+        var gb=document.createElement("div"); gb.className="genbadge"; gb.textContent="生成中"; fr.appendChild(gb);
+        var gt=document.createElement("div"); gt.className="gentime"; gt.dataset.start=j.start; gt.textContent="0:00"; fr.appendChild(gt);
+      } else {
+        var x=document.createElement("div"); x.className="x"; x.textContent="!"; fr.appendChild(x);
+      }
+      t.appendChild(fr);
+      var lb=document.createElement("div"); lb.className="label";
+      lb.textContent = j.status==="fail" ? ("失败 · "+(j.err||"")) : (j.prompt || (modeLabel(j.mode)));
+      t.appendChild(lb);
+      t.onclick=function(){ if(j.status==="done") loadPlayer(j); };
+      q.appendChild(t);
+    });
+  }
+  function tickTimers(){
+    var now=Date.now();
+    document.querySelectorAll(".gentime").forEach(function(el){
+      var s=Math.floor((now-Number(el.dataset.start))/1000);
+      el.textContent=Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+    });
+  }
+  setInterval(tickTimers, 500);
+
+  // ====== 播放区 ======
+  function loadPlayer(j){
+    selId=j.id;
+    var st=$("stage");
+    st.innerHTML="";
+    var ps=document.createElement("div"); ps.className="poster"; ps.style.background=poster(j.seed); st.appendChild(ps);
+    var gr=document.createElement("div"); gr.className="grid"; st.appendChild(gr);
+    var dl=document.createElement("button"); dl.className="dl"; dl.textContent="↓ 下载"; dl.onclick=download; st.appendChild(dl);
+    var bp=document.createElement("div"); bp.className="bigplay"; bp.textContent="▶";
+    bp.onclick=function(){ bp.textContent = bp.textContent==="▶"?"❚❚":"▶"; };
+    st.appendChild(bp);
+    $("playerMeta").innerHTML="<b>"+modeLabel(j.mode)+"</b> · "+j.res+" · "+j.ratio+" · "+j.dur+"s";
+    renderQueue();
+  }
+  function download(){
+    showToast('已保存到　<span class="mono">下载\\AI视频生成保存的视频\\2026-06-02\\</span>');
+  }
+
+  function showToast(html){
+    var t=$("toast"); t.innerHTML=html; t.classList.add("show");
+    clearTimeout(showToast._t); showToast._t=setTimeout(function(){ t.classList.remove("show"); }, 2800);
+  }
+
+  // ====== 生成 ======
+  function generate(){
+    var prompt=$("prompt").value.trim();
+    if(!prompt && images.length===0){ $("err").textContent="请至少输入一段画面描述（或加一张参考图）"; return; }
+    $("err").textContent="";
+    var j={ id:++jobSeq, status:"gen", prompt:prompt||"（仅图片）",
+            mode:modeOf(images.length), res:$("res").value, ratio:$("ratio").value, dur:$("dur").value,
+            seed:seedSeq++, start:Date.now() };
+    jobs.unshift(j);              // 新任务排在最前
+    // 清空输入，可立即提交下一条
+    $("prompt").value=""; autoGrow(); images=[]; renderDropzone(); updateMode();
+    renderQueue();
+    // 模拟生成：3.5~5.5s 后完成
+    var dur=3500+Math.random()*2000;
+    setTimeout(function(){
+      j.status="done";
+      renderQueue();
+      loadPlayer(j);             // 自动载入播放区
+    }, dur);
+  }
+  // 提示词框：随行数自动长高（无滚动条）
+  function autoGrow(){
+    var t=$("prompt"); t.style.height="auto";
+    // border-box 下要补上上下边框（1+1px），否则末行被裁 ~2px
+    var border=t.offsetHeight-t.clientHeight;
+    t.style.height=Math.max(62, t.scrollHeight+border)+"px";
+  }
+  $("prompt").addEventListener("input", autoGrow);
+
+  $("genBtn").addEventListener("click", generate);
+  $("prompt").addEventListener("keydown", function(e){ if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault(); generate();} });
+
+  // 顶部按钮
+  $("newBtn").addEventListener("click", function(){ $("prompt").focus(); images=[]; renderDropzone(); updateMode(); $("err").textContent=""; });
+  $("closeBtn").addEventListener("click", function(){ document.querySelector(".panel").style.transition="opacity .25s"; document.querySelector(".panel").style.opacity=".25"; setTimeout(function(){document.querySelector(".panel").style.opacity="1";},700); });
+
+  // ====== 预置示例 ======
+  function seedExamples(){
+    jobs=[
+      { id:++jobSeq, status:"done", prompt:"赛博朋克城市夜景，霓虹倒影，缓慢推近", mode:"text", res:"720p", ratio:"16:9", dur:"5", seed:seedSeq++ },
+      { id:++jobSeq, status:"done", prompt:"一只橘猫在窗台上伸懒腰，阳光，电影感", mode:"image", res:"1080p", ratio:"16:9", dur:"5", seed:seedSeq++ },
+      { id:++jobSeq, status:"fail", prompt:"海浪拍打礁石", mode:"text", err:"额度不足", seed:seedSeq++ }
+    ];
+    renderQueue();
+    loadPlayer(jobs[0]);
+  }
+
+  renderDropzone(); updateMode(); seedExamples(); autoGrow();
+  window.__ready=true;
+})();
+</script>
+</body>
+</html>

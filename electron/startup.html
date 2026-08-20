@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alice 正在启动</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #11161c;
+      --panel-2: #151c23;
+      --line: #25313b;
+      --text: #e7edf3;
+      --muted: #8d9aa7;
+      --soft: #53606d;
+      --accent: #56d6b2;
+      --accent-2: #7fb8ff;
+      --warn: #efb667;
+      --error: #ff7f8a;
+      --ok: #77df9f;
+    }
+
+    * { box-sizing: border-box; }
+
+    .startup-titlebar { display: none; }
+
+    .windows-titlebar-overlay body::before {
+      content: "";
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 19;
+      height: env(titlebar-area-height, 38px);
+      pointer-events: none;
+      background: var(--bg);
+      border-bottom: 1px solid rgba(141, 154, 167, 0.14);
+    }
+
+    .windows-titlebar-overlay .startup-titlebar {
+      position: fixed;
+      inset: 0 auto auto 0;
+      z-index: 20;
+      width: env(titlebar-area-width, calc(100% - 138px));
+      height: env(titlebar-area-height, 38px);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 14px;
+      color: var(--text);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      -webkit-app-region: drag;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+        var(--bg);
+      background-size: 44px 44px;
+      color: var(--text);
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(360px, 520px) minmax(420px, 1fr);
+      gap: 32px;
+      align-items: center;
+      padding: clamp(24px, 4vw, 48px) clamp(28px, 5vw, 72px);
+    }
+
+    .windows-titlebar-overlay .shell {
+      min-height: calc(100vh - 38px);
+      margin-top: 38px;
+    }
+
+    .windows-titlebar-overlay.window-fullscreen body::before,
+    .windows-titlebar-overlay.window-fullscreen .startup-titlebar {
+      display: none;
+    }
+
+    .windows-titlebar-overlay.window-fullscreen .shell {
+      min-height: 100vh;
+      margin-top: 0;
+    }
+
+    .identity {
+      max-width: 520px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+
+    .mark {
+      width: 42px;
+      height: 42px;
+      border: 1px solid rgba(86, 214, 178, 0.52);
+      background: #10201f;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      letter-spacing: 0;
+      color: var(--accent);
+      box-shadow: 0 0 34px rgba(86, 214, 178, 0.12);
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .brand strong {
+      font-size: 20px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 520px;
+      font-size: clamp(36px, 5vw, 64px);
+      line-height: 0.98;
+      letter-spacing: 0;
+      font-weight: 720;
+    }
+
+    .message {
+      min-height: 32px;
+      margin: 22px 0 34px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.55;
+    }
+
+    .meter {
+      width: min(420px, 100%);
+    }
+
+    .meter-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .percent {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      font-size: 22px;
+      font-weight: 650;
+    }
+
+    .track {
+      height: 8px;
+      width: 100%;
+      overflow: hidden;
+      background: #1a232c;
+      border: 1px solid #26323d;
+    }
+
+    .fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 260ms ease;
+    }
+
+    .steps {
+      align-self: center;
+      min-height: 0;
+      max-height: calc(100vh - 48px);
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: rgba(17, 22, 28, 0.92);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
+    }
+
+    .steps-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel-2);
+    }
+
+    .steps-title {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .elapsed {
+      color: var(--soft);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .step-list {
+      display: grid;
+      padding: 6px;
+      gap: 4px;
+      max-height: calc(100vh - 122px);
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #33414d transparent;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 42px;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    .step.running {
+      border-color: rgba(86, 214, 178, 0.35);
+      background: rgba(86, 214, 178, 0.055);
+    }
+
+    .step.done { color: var(--text); }
+    .step.error {
+      border-color: rgba(255, 127, 138, 0.45);
+      background: rgba(255, 127, 138, 0.08);
+    }
+
+    .dot {
+      width: 18px;
+      height: 18px;
+      border: 1px solid #3b4650;
+      background: #161d24;
+      display: grid;
+      place-items: center;
+    }
+
+    .done .dot {
+      border-color: rgba(119, 223, 159, 0.65);
+      background: rgba(119, 223, 159, 0.14);
+    }
+
+    .done .dot::after {
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: var(--ok);
+    }
+
+    .running .dot {
+      border-color: var(--accent);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .error .dot {
+      border-color: var(--error);
+      background: rgba(255, 127, 138, 0.18);
+    }
+
+    .copy {
+      min-width: 0;
+    }
+
+    .label {
+      font-size: 15px;
+      line-height: 1.2;
+      font-weight: 620;
+      letter-spacing: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .detail {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11.5px;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .state {
+      color: var(--soft);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .running .state { color: var(--accent); }
+    .done .state { color: var(--ok); }
+    .error .state { color: var(--error); }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(86, 214, 178, 0.22); }
+      50% { box-shadow: 0 0 0 7px rgba(86, 214, 178, 0); }
+    }
+
+    @media (max-width: 860px) {
+      body { overflow: auto; }
+      .shell {
+        min-height: auto;
+        grid-template-columns: 1fr;
+        align-items: start;
+        padding: 28px;
+      }
+      .steps {
+        max-height: none;
+      }
+      .step-list {
+        max-height: none;
+      }
+      h1 {
+        font-size: 38px;
+      }
+    }
+  </style>
+  <script>
+    if (window.alice?.isElectron && window.alice?.platform === 'win32') {
+      document.documentElement.classList.add('windows-titlebar-overlay');
+    }
+  </script>
+</head>
+<body>
+  <header class="startup-titlebar" aria-label="Window drag area"></header>
+  <main class="shell">
+    <section class="identity" aria-live="polite">
+      <div class="brand-row">
+        <div class="mark">BL</div>
+        <div class="brand">
+          <strong>Alice</strong>
+          <span id="version">Desktop Agent</span>
+        </div>
+      </div>
+      <h1>正在打开桌面</h1>
+      <div class="message" id="message">正在准备启动环境</div>
+      <div class="meter" aria-label="启动进度">
+        <div class="meter-head">
+          <span>启动进度</span>
+          <span class="percent" id="percent">0%</span>
+        </div>
+        <div class="track"><div class="fill" id="fill"></div></div>
+      </div>
+    </section>
+
+    <section class="steps" aria-label="启动步骤">
+      <div class="steps-head">
+        <div class="steps-title">正在进行的步骤</div>
+        <div class="elapsed" id="elapsed">0.0s</div>
+      </div>
+      <div class="step-list" id="steps"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { localizeDom, observeDomLocalization, t, translateUiText } from '../src/ui/brain-ui/i18n/index.js'
+    localizeDom(document)
+    observeDomLocalization(document.body)
+
+    const fallbackSteps = [
+      ['port', t('startup.port'), t('startup.portDetail')],
+      ['core', t('startup.core'), t('startup.coreDetail')],
+      ['resources', t('startup.resources'), t('startup.resourcesDetail')],
+      ['tools', t('startup.tools'), t('startup.toolsDetail')],
+      ['api', t('startup.api'), t('startup.apiDetail')],
+    ];
+
+    const messageEl = document.getElementById('message');
+    const percentEl = document.getElementById('percent');
+    const fillEl = document.getElementById('fill');
+    const stepsEl = document.getElementById('steps');
+    const elapsedEl = document.getElementById('elapsed');
+    const versionEl = document.getElementById('version');
+    let startedAt = Date.now();
+    let latestState = {
+      startedAt,
+      percent: 0,
+      message: t('startup.preparing'),
+      steps: fallbackSteps.map(([id, label, detail]) => ({ id, label, detail, status: 'pending' })),
+    };
+
+    function stateText(status) {
+      if (status === 'done') return t('startup.done');
+      if (status === 'running') return t('startup.running');
+      if (status === 'error') return t('startup.failed');
+      return t('startup.waiting');
+    }
+
+    function render(state) {
+      if (!state) return;
+      latestState = state;
+      startedAt = state.startedAt || startedAt;
+      const percent = Math.max(0, Math.min(100, Number(state.percent) || 0));
+      messageEl.textContent = translateUiText(state.message || t('startup.preparing'));
+      percentEl.textContent = `${percent}%`;
+      fillEl.style.width = `${percent}%`;
+
+      stepsEl.replaceChildren();
+      for (const step of state.steps || []) {
+        const item = document.createElement('div');
+        item.className = `step ${step.status || 'pending'}`;
+
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        item.appendChild(dot);
+
+        const copy = document.createElement('div');
+        copy.className = 'copy';
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = translateUiText(step.label || step.id || '');
+        const detail = document.createElement('div');
+        detail.className = 'detail';
+        detail.textContent = translateUiText(step.detail || '');
+        copy.append(label, detail);
+        item.appendChild(copy);
+
+        const stateLabel = document.createElement('div');
+        stateLabel.className = 'state';
+        stateLabel.textContent = stateText(step.status);
+        item.appendChild(stateLabel);
+
+        stepsEl.appendChild(item);
+      }
+      updateElapsed();
+    }
+
+    function updateElapsed() {
+      const elapsed = Math.max(0, Date.now() - (latestState.startedAt || startedAt));
+      elapsedEl.textContent = `${(elapsed / 1000).toFixed(1)}s`;
+    }
+
+    render(latestState);
+    setInterval(updateElapsed, 200);
+
+    const bridge = window.alice;
+    if (bridge) {
+      const setFullScreenClass = (fullscreen) => {
+        document.documentElement.classList.toggle('window-fullscreen', Boolean(fullscreen));
+      };
+      bridge.onFullScreenChange?.(setFullScreenClass);
+      bridge.isFullScreen?.().then(setFullScreenClass).catch(() => {});
+      bridge.getVersion?.().then((version) => {
+        if (version) versionEl.textContent = `Desktop Agent ${version}`;
+      }).catch(() => {});
+      bridge.getStartupProgress?.().then(render).catch(() => {});
+      bridge.onStartupProgress?.(render);
+    }
+  </script>
+</body>
+</html>

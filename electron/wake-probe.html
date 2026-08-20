@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Alice 唤醒耳朵</title>
+</head>
+<body>
+<!-- 这是一个隐藏的"耳朵"窗口:常开麦克风,把 16kHz Float32 PCM 送主进程做唤醒词检测。
+     第一步只做检测+写日志,无任何可见 UI / 无其他动作。 -->
+<script>
+(async () => {
+  const CHUNK = 1600;        // 0.1s @16k
+  const TARGET_SR = 16000;
+
+  function report(status, detail) {
+    try { window.wakeProbe?.reportStatus(status, detail); } catch {}
+  }
+
+  // AudioWorklet 源码:累积到 CHUNK 个样本就把 Float32 拷一份投递到主线程。
+  const WORKLET_SRC = `
+    class WakeCapture extends AudioWorkletProcessor {
+      constructor(opt){ super(); this._size = (opt&&opt.processorOptions&&opt.processorOptions.chunk)||1600; this._buf=new Float32Array(this._size); this._n=0; }
+      process(inputs){
+        const ch = inputs[0] && inputs[0][0];
+        if (ch) {
+          for (let i=0;i<ch.length;i++){
+            this._buf[this._n++] = ch[i];
+            if (this._n >= this._size){
+              const out = this._buf.slice(0, this._n);   // 拷贝,避免视图/复用问题
+              this.port.postMessage(out, [out.buffer]);
+              this._n = 0;
+            }
+          }
+        }
+        return true;
+      }
+    }
+    registerProcessor('wake-capture', WakeCapture);
+  `;
+
+  async function start() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        // KWS 要原始音频:降噪/回声消除/自动增益都关掉,它们会扭曲语音、害识别
+        // (模型在干净音频上训练,样本能 100% 命中正因为干净)。
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
+      });
+    } catch (e) {
+      report('mic-denied', e?.name || String(e));
+      // 麦克风未就绪,稍后重试(权限/设备可能晚到)
+      setTimeout(start, 3000);
+      return;
+    }
+
+    try {
+      const actx = new AudioContext({ sampleRate: TARGET_SR });
+      if (actx.state === 'suspended') { try { await actx.resume(); } catch {} }
+      const src = actx.createMediaStreamSource(stream);
+
+      const blob = new Blob([WORKLET_SRC], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      await actx.audioWorklet.addModule(url);
+
+      const node = new AudioWorkletNode(actx, 'wake-capture', {
+        numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1,
+        processorOptions: { chunk: CHUNK },
+      });
+      node.port.onmessage = (ev) => {
+        // ev.data 是 Float32Array;把其底层 buffer 送主进程
+        const f32 = ev.data;
+        window.wakeProbe?.sendPcm(f32.buffer);
+      };
+      src.connect(node);
+      node.connect(actx.destination); // 拉动音频图(输出静音)
+
+      report('running', 'sr=' + actx.sampleRate);
+      console.log('[wake-probe] 耳朵已开,采样率', actx.sampleRate);
+    } catch (e) {
+      report('error', e?.message || String(e));
+      console.error('[wake-probe] 启动失败', e);
+    }
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

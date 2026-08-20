@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: transparent;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.banner {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(12, 12, 18, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 8px 12px 9px 12px;
+  position: relative;
+  cursor: default;
+  -webkit-app-region: drag;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* ── 关闭按钮：右上角，hover 才出现 ── */
+.close-btn {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 60, 60, 0.85);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+.banner:hover .close-btn { opacity: 1; }
+.close-btn:hover { background: rgba(255, 35, 35, 1); }
+
+/* ── 标题行：FOCUS 标签 + 展开箭头（两端对齐） ── */
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  -webkit-app-region: drag;
+  padding-right: 20px; /* 给关闭按钮留空间 */
+}
+
+.focus-label {
+  font-size: 9px;
+  color: rgba(245, 180, 70, 0.65);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+/* 展开箭头：放在标题行右侧，远离关闭按钮 */
+.expand-arrow {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  display: none;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.expand-arrow.visible { display: inline; }
+.expand-arrow.open { transform: rotate(180deg); }
+
+/* ── 任务区（自动换行，固定宽度） ── */
+.task-area {
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
+.task-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.45;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.current-step-text {
+  font-size: 11px;
+  color: rgba(245, 180, 70, 0.7);
+  line-height: 1.4;
+  word-break: break-all;
+  white-space: normal;
+  margin-top: 2px;
+  display: none;
+}
+.current-step-text.visible { display: block; }
+
+/* ── 任务列表 ── */
+.task-list {
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  -webkit-app-region: no-drag;
+}
+.task-list.visible { display: flex; }
+
+.task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.task-item input[type="checkbox"] {
+  accent-color: #f5a623;
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.task-item .item-label {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  line-height: 1.4;
+  word-break: break-all;
+  white-space: normal;
+}
+.task-item.done .item-label {
+  text-decoration: line-through;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* ── 语音区域 ── */
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  -webkit-app-region: no-drag;
+}
+
+.voice-transcript {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+  word-break: break-all;
+  white-space: normal;
+  max-height: 52px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.voice-transcript::-webkit-scrollbar { display: none; }
+.voice-transcript.interim { color: rgba(255, 255, 255, 0.32); font-style: italic; }
+.voice-transcript.final   { color: rgba(255, 255, 255, 0.8); }
+.voice-transcript:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(255, 255, 255, 0.16);
+  font-style: italic;
+}
+
+.voice-hint {
+  font-size: 9.5px;
+  color: rgba(245, 180, 70, 0.5);
+  flex-shrink: 0;
+  display: none;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.voice-hint.visible { display: inline; }
+.voice-hint:hover { color: rgba(245, 180, 70, 0.95); }
+
+/* ── 语音球 ── */
+.voice-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  -webkit-app-region: no-drag;
+}
+.voice-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.voice-btn:active { transform: scale(0.92); }
+.voice-btn.recording {
+  background: rgba(220, 50, 50, 0.75);
+  border-color: rgba(255, 80, 80, 0.6);
+  animation: pulse-ring 1.2s ease-out infinite;
+}
+.voice-btn.error-state {
+  background: rgba(200, 60, 30, 0.5);
+  border-color: rgba(255, 100, 60, 0.5);
+}
+
+.mic-icon {
+  width: 12px;
+  height: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.mic-body {
+  width: 8px;
+  height: 10px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  background: transparent;
+  flex-shrink: 0;
+}
+.voice-btn.recording .mic-body {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.9);
+}
+.mic-base {
+  width: 10px;
+  height: 4px;
+  border-radius: 0 0 5px 5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-top: none;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.voice-btn.recording .mic-base { border-color: rgba(255, 255, 255, 0.9); }
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(220, 50, 50, 0.6); }
+  70%  { box-shadow: 0 0 0 6px rgba(220, 50, 50, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 50, 50, 0); }
+}
+@keyframes flash-sent {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+.voice-transcript.sent { animation: flash-sent 0.4s ease; }
+</style>
+</head>
+<body>
+<div class="banner" id="banner">
+  <div class="close-btn" id="closeBtn">✕</div>
+
+  <!-- 标题行：FOCUS 标签 左，展开箭头 右（远离关闭按钮） -->
+  <div class="header-row" id="headerRow">
+    <span class="focus-label">专注</span>
+    <span class="expand-arrow" id="expandArrow">▼</span>
+  </div>
+
+  <!-- 任务区：主任务 + 当前步骤（折叠态可见） -->
+  <div class="task-area" id="taskArea">
+    <div class="task-text" id="taskText" data-i18n-ignore>准备中...</div>
+    <div class="current-step-text" id="currentStepText" data-i18n-ignore></div>
+  </div>
+
+  <!-- 展开后的子任务列表 -->
+  <div class="task-list" id="taskList" data-i18n-ignore></div>
+
+  <!-- 语音区 -->
+  <div class="voice-row" id="voiceRow">
+    <span class="voice-transcript" id="voiceTranscript" data-i18n-ignore></span>
+    <span class="voice-hint" id="voiceHint" title="点击立即发送">↑发送</span>
+    <div class="voice-btn" id="voiceBtn" title="点击说话">
+      <div class="mic-icon">
+        <div class="mic-body"></div>
+        <div class="mic-base"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { localizeDom, observeDomLocalization, t, translateUiText } from './src/ui/brain-ui/i18n/index.js'
+localizeDom(document)
+observeDomLocalization(document.body)
+document.getElementById('voiceTranscript').dataset.placeholder = t('focus.voicePlaceholder')
+
+/* ── 状态 ── */
+let state = { task: '', current_step: '', tasks: [], expanded: false }
+let backendPort = null
+let backendSecure = false
+
+/* ── 云端 ASR 状态 ── */
+let micStream = null
+let audioCtx = null
+let scriptProcessor = null
+let cloudWs = null
+let isRecording = false
+let currentText = ''
+let finalText = ''
+let sendTimer = null
+
+/* ════════════════════════════════
+   渲染
+   ════════════════════════════════ */
+function render() {
+  const taskTextEl      = document.getElementById('taskText')
+  const currentStepEl   = document.getElementById('currentStepText')
+  const taskListEl      = document.getElementById('taskList')
+  const expandArrow     = document.getElementById('expandArrow')
+
+  taskTextEl.textContent = state.task || t('focus.active')
+
+  // 折叠态显示当前步骤
+  if (state.current_step) {
+    currentStepEl.textContent = '▸ ' + state.current_step
+    currentStepEl.classList.add('visible')
+  } else {
+    currentStepEl.textContent = ''
+    currentStepEl.classList.remove('visible')
+  }
+
+  // 子任务列表
+  if (state.tasks.length > 0) {
+    expandArrow.classList.add('visible')
+    taskListEl.innerHTML = state.tasks.map((t, i) => {
+      const done = t.done || false
+      return `<div class="task-item ${done ? 'done' : ''}" data-idx="${i}">
+        <input type="checkbox" id="cb_${i}" ${done ? 'checked' : ''}>
+        <span class="item-label">${escHtml(t.text)}</span>
+      </div>`
+    }).join('')
+
+    taskListEl.querySelectorAll('.task-item').forEach(el => {
+      const idx = parseInt(el.dataset.idx)
+      el.addEventListener('click', e => {
+        if (e.target.tagName === 'INPUT') return
+        toggleTask(idx)
+      })
+    })
+    taskListEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const idx = parseInt(cb.id.replace('cb_', ''))
+        state.tasks[idx].done = cb.checked
+        const item = cb.closest('.task-item')
+        if (item) item.className = 'task-item' + (cb.checked ? ' done' : '')
+        window.focusBanner?.toggleTask(idx, cb.checked)
+        syncCurrentStep()
+      })
+    })
+  } else {
+    expandArrow.classList.remove('visible')
+    expandArrow.classList.remove('open')
+    taskListEl.innerHTML = ''
+  }
+
+  if (state.expanded && state.tasks.length > 0) {
+    taskListEl.classList.add('visible')
+    expandArrow.classList.add('open')
+  } else {
+    taskListEl.classList.remove('visible')
+    expandArrow.classList.remove('open')
+  }
+
+  requestAnimationFrame(() => window.focusBanner?.requestResize())
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// 勾选后自动把 current_step 推进到第一个未完成的步骤
+function syncCurrentStep() {
+  if (state.tasks.length === 0) return
+  const next = state.tasks.find(t => !t.done)
+  state.current_step = next ? next.text : ''
+  // 更新折叠态的步骤文字
+  const el = document.getElementById('currentStepText')
+  if (el) {
+    if (state.current_step) {
+      el.textContent = '▸ ' + state.current_step
+      el.classList.add('visible')
+    } else {
+      el.textContent = ''
+      el.classList.remove('visible')
+    }
+  }
+  window.focusBanner?.requestResize()
+}
+
+function toggleTask(idx) {
+  if (idx < 0 || idx >= state.tasks.length) return
+  state.tasks[idx].done = !state.tasks[idx].done
+  const cb = document.getElementById(`cb_${idx}`)
+  if (cb) cb.checked = state.tasks[idx].done
+  const item = document.querySelector(`[data-idx="${idx}"]`)
+  if (item) item.className = 'task-item' + (state.tasks[idx].done ? ' done' : '')
+  window.focusBanner?.toggleTask(idx, state.tasks[idx].done)
+  syncCurrentStep()
+}
+
+/* ════════════════════════════════
+   云端 ASR
+   ════════════════════════════════ */
+async function startRecording() {
+  if (isRecording) { stopRecording(); return }
+  if (!backendPort) { setTranscript(t('focus.waitingBackend'), 'interim'); return }
+
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+  } catch {
+    setTranscript(t('focus.allowMic'), 'interim')
+    setVoiceBtnState('error')
+    return
+  }
+
+  audioCtx = new AudioContext({ sampleRate: 16000 })
+  const src = audioCtx.createMediaStreamSource(micStream)
+  scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1)
+  src.connect(scriptProcessor)
+  scriptProcessor.connect(audioCtx.destination)
+
+  scriptProcessor.onaudioprocess = (e) => {
+    if (!cloudWs || cloudWs.readyState !== WebSocket.OPEN) return
+    const f32 = e.inputBuffer.getChannelData(0)
+    const i16 = new Int16Array(f32.length)
+    for (let i = 0; i < f32.length; i++) {
+      i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768))
+    }
+    cloudWs.send(i16.buffer)
+  }
+
+  cloudWs = new WebSocket(`${backendSecure ? 'wss' : 'ws'}://127.0.0.1:${backendPort}/voice/cloud`)
+  cloudWs.binaryType = 'arraybuffer'
+
+  cloudWs.onopen = () => {
+    cloudWs.send(JSON.stringify({ type: 'config', lang: 'zh' }))
+    isRecording = true
+    currentText = ''
+    finalText = ''
+    setTranscript('', '')
+    setVoiceBtnState('recording')
+    showSendHint(false)
+  }
+
+  cloudWs.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data)
+      if (msg.type === 'transcript') {
+        const text = (msg.text || '').trim()
+        if (!text) return
+        currentText = text
+        if (msg.is_final) {
+          finalText = text
+          setTranscript(text, 'final')
+          clearTimeout(sendTimer)
+          sendTimer = setTimeout(() => sendMessage(), 1500)
+          showSendHint(true)
+        } else {
+          setTranscript(text, 'interim')
+        }
+      } else if (msg.type === 'error') {
+        setTranscript(translateUiText(msg.message || t('focus.recognitionError')), 'interim')
+        setVoiceBtnState('error')
+        cleanupAudio()
+      }
+    } catch {}
+  }
+
+  cloudWs.onerror = () => {
+    setTranscript(t('focus.connectionError'), 'interim')
+    setVoiceBtnState('error')
+    cleanupAudio()
+  }
+
+  cloudWs.onclose = () => {
+    if (isRecording) { isRecording = false; setVoiceBtnState('idle') }
+  }
+}
+
+function stopRecording() {
+  isRecording = false
+  setVoiceBtnState('idle')
+  if (cloudWs && cloudWs.readyState === WebSocket.OPEN) {
+    try { cloudWs.send(JSON.stringify({ type: 'flush' })) } catch {}
+    setTimeout(() => { try { cloudWs?.close() } catch {} cloudWs = null }, 300)
+  } else {
+    cloudWs = null
+  }
+  cleanupAudio()
+}
+
+function cleanupAudio() {
+  try { scriptProcessor?.disconnect() } catch {}
+  scriptProcessor = null
+  try { if (audioCtx) { audioCtx.close(); audioCtx = null } } catch {}
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null }
+}
+
+function sendMessage() {
+  const text = (finalText || currentText).trim()
+  if (!text || !backendPort) return
+  clearTimeout(sendTimer)
+  showSendHint(false)
+  fetch(`${backendSecure ? 'https' : 'http'}://127.0.0.1:${backendPort}/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from_id: 'ID:000001', content: text, channel: 'FocusBanner' }),
+  }).then(() => {
+    const el = document.getElementById('voiceTranscript')
+    el.classList.add('sent')
+    setTimeout(() => {
+      el.classList.remove('sent')
+      setTranscript('', '')
+      finalText = ''
+      currentText = ''
+      window.focusBanner?.requestResize()
+    }, 500)
+  }).catch(() => setTranscript(t('focus.sendFailed'), 'interim'))
+}
+
+/* ── UI 辅助 ── */
+function setVoiceBtnState(s) {
+  const btn = document.getElementById('voiceBtn')
+  btn.classList.toggle('recording',   s === 'recording')
+  btn.classList.toggle('error-state', s === 'error')
+}
+
+function setTranscript(text, cls) {
+  const el = document.getElementById('voiceTranscript')
+  el.textContent = text
+  el.className = 'voice-transcript' + (cls ? ' ' + cls : '')
+  window.focusBanner?.requestResize()
+}
+
+function showSendHint(show) {
+  document.getElementById('voiceHint').classList.toggle('visible', show)
+}
+
+/* ════════════════════════════════
+   事件绑定
+   ════════════════════════════════ */
+document.getElementById('closeBtn').addEventListener('click', () => {
+  window.focusBanner?.close()
+})
+
+// 点击任务区或展开箭头都可以展开/折叠
+function toggleExpand() {
+  if (state.tasks.length === 0) return
+  state.expanded = !state.expanded
+  render()
+  window.focusBanner?.setExpanded(state.expanded)
+}
+document.getElementById('taskArea').addEventListener('click', toggleExpand)
+document.getElementById('expandArrow').addEventListener('click', toggleExpand)
+
+document.getElementById('voiceBtn').addEventListener('click', startRecording)
+document.getElementById('voiceHint').addEventListener('click', () => {
+  clearTimeout(sendTimer)
+  sendMessage()
+})
+
+/* ════════════════════════════════
+   Preload 桥接
+   ════════════════════════════════ */
+if (window.focusBanner) {
+  window.focusBanner.onUpdate(data => {
+    if (data.task         !== undefined) state.task         = data.task
+    if (data.current_step !== undefined) state.current_step = data.current_step
+    if (data.tasks        !== undefined) state.tasks        = data.tasks.map(t => ({ text: t.text, done: !!t.done }))
+    render()
+  })
+  window.focusBanner.onConfig(cfg => {
+    if (cfg.port) backendPort = cfg.port
+    backendSecure = cfg.secure === true
+  })
+}
+
+render()
+</script>
+</body>
+</html>

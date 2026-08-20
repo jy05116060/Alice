@@ -1,0 +1,411 @@
+/* scene-shell 样式 —— 电影级投影 shell 的全部呈现与动画。
+ *
+ * 这里持有「界面长什么样」的全部决定:配色、留白、缓动、入出场动画。
+ * core 永远不下发任何像素 / 位置 / 尺寸 / 动画名(见 SCENE-PROTOCOL §5.3),
+ * 它们都活在这个文件与 kinds/ 里。改皮肤只动这一层。 */
+
+:root {
+  /* 缓动:统一的电影级曲线。entrance 用减速、exit 用加速、morph 用标准曲线。 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);     /* 入场:快进慢出,有"落位"感 */
+  --ease-in:  cubic-bezier(0.5, 0, 0.75, 0);     /* 出场:慢起快走,干脆离场 */
+  --ease-mo:  cubic-bezier(0.65, 0, 0.35, 1);    /* morph:对称标准曲线 */
+  --dur-enter: 620ms;
+  --dur-exit:  420ms;
+  --dur-morph: 520ms;
+
+  --bg:        #0b0e14;
+  --surface:   #151a23;
+  --surface-2: #1c2330;
+  --line:      #28303d;
+  --text:      #e8edf4;
+  --text-dim:  #9aa7b8;
+  --accent:    #5b9dff;
+  --danger:    #ff6b6b;
+  --good:      #4ade80;
+  --radius:    16px;
+  --shadow:    0 18px 60px rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+
+/* scene-shell 是叠加层:不污染宿主页的 html/body(渲染端不该决定宿主页 chrome)。
+ * 页面背景由宿主决定——独立页(index/demo.html)在各自 <style> 里自带,嵌入 brain-ui 时用宿主的。 */
+
+/* 舞台:所有 surface 的根容器。固定全屏叠加层,本身不挡宿主交互;flex 落位由 intent 分区决定。 */
+#stage {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;           /* 盖在宿主 UI 之上 */
+  pointer-events: none;          /* 叠加层空白处不拦截宿主页点击 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 40px;
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* confront 出现时压暗背景,把焦点逼到中央(背景退后)。 */
+#stage.has-confront::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 10, 0.62);
+  backdrop-filter: blur(3px);
+  animation: scrim-in 380ms var(--ease-out) both;
+  z-index: 5;
+}
+@keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── surface 外壳:所有顶层 surface 的通用容器 ───────────────────────── */
+.surface {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px 26px;
+  max-width: min(560px, 86vw);
+  /* will-change + transform 让 enter/exit/morph 走 GPU 合成层,避免重排卡顿。 */
+  will-change: transform, opacity;
+  pointer-events: auto;          /* #stage 关掉了指针事件,surface 自身要恢复交互 */
+}
+
+/* 顶层卡片关闭按钮:常态不打扰内容，只在鼠标 hover 到卡片时显示。
+ * focus-visible 是键盘用户的可访问性兜底，不会改变鼠标交互规则。 */
+.surface.is-dismissible { padding-right: 54px; }
+.surface-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(154, 167, 184, 0.24);
+  border-radius: 50%;
+  background: rgba(11, 14, 20, 0.72);
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-3px) scale(0.92);
+  transition:
+    opacity 160ms var(--ease-out),
+    visibility 160ms,
+    transform 160ms var(--ease-out),
+    color 140ms,
+    background 140ms,
+    border-color 140ms;
+  backdrop-filter: blur(6px);
+}
+.surface-close::before,
+.surface-close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+}
+.surface-close::before { transform: translate(-50%, -50%) rotate(45deg); }
+.surface-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.surface.is-dismissible:hover > .surface-close,
+.surface-close:focus-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+.surface-close:hover,
+.surface-close:focus-visible {
+  color: #fff;
+  background: rgba(255, 107, 107, 0.82);
+  border-color: rgba(255, 107, 107, 0.92);
+  outline: none;
+}
+
+/* intent 分区:shell 自行把语义重要性映射成呈现强度与落位。
+ * ambient = 角落、低饱和、收缩;inform = 常规;confront = 居中、放大、抢焦点。 */
+.surface[data-intent="ambient"] {
+  opacity: 0.86;
+  filter: saturate(0.8);
+  transform: scale(0.92);
+  max-width: min(320px, 70vw);
+  align-self: flex-end;   /* 飘到一侧,不抢中心 */
+}
+.surface[data-intent="confront"] {
+  z-index: 10;
+  border-color: var(--accent);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(91, 157, 255, 0.25);
+  transform: scale(1.04);
+  max-width: min(640px, 92vw);
+}
+.surface[data-focus="true"] {
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(91, 157, 255, 0.5);
+}
+
+/* ── enter / exit:由 shell.js 加 class 触发,kinds 可叠加自己的细节 ──── */
+.surface.is-entering {
+  animation: surface-enter var(--dur-enter) var(--ease-out) both;
+}
+.surface[data-intent="ambient"].is-entering {
+  animation: surface-enter-ambient var(--dur-enter) var(--ease-out) both;
+}
+.surface[data-intent="confront"].is-entering {
+  animation: surface-enter-confront 720ms var(--ease-out) both;
+}
+.surface.is-exiting {
+  animation: surface-exit var(--dur-exit) var(--ease-in) both;
+  pointer-events: none;
+}
+
+@keyframes surface-enter {
+  from { opacity: 0; transform: translateY(26px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes surface-enter-ambient {
+  from { opacity: 0; transform: translateY(10px) scale(0.88); filter: saturate(0.8) blur(2px); }
+  to   { opacity: 0.86; transform: translateY(0) scale(0.92); filter: saturate(0.8) blur(0); }
+}
+@keyframes surface-enter-confront {
+  0%   { opacity: 0; transform: translateY(48px) scale(0.86); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) scale(1.04); }
+}
+@keyframes surface-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-18px) scale(0.94); }
+}
+
+/* morph:数据原地变化时的一次轻微"脉冲",具体内容过渡在各 kind 里做。 */
+.surface.is-morphing {
+  animation: surface-morph var(--dur-morph) var(--ease-mo);
+}
+@keyframes surface-morph {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.018); }
+  100% { transform: scale(1); }
+}
+
+/* 错峰入场:同一帧多个 surface 依次进场,由 shell.js 设置 --stagger。 */
+.surface.is-entering { animation-delay: var(--stagger, 0ms); }
+
+/* ── 文字/通用排版 ──────────────────────────────────────────────────── */
+.s-title { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-dim); margin: 0 0 8px; text-transform: uppercase; }
+.s-body  { font-size: 18px; line-height: 1.55; margin: 0; }
+.s-foot  { font-size: 13px; color: var(--text-dim); margin: 12px 0 0; }
+
+/* 通用淡入淡出(供 kind 内部对子内容做交叉淡化)。 */
+.fade-swap { transition: opacity 200ms var(--ease-mo); }
+
+/* ── kind: metric ───────────────────────────────────────────────────── */
+.m-row { display: flex; align-items: baseline; gap: 8px; }
+.m-value { font-size: 46px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.m-unit { font-size: 18px; color: var(--text-dim); }
+.m-trend { font-size: 16px; margin-left: 4px; }
+.m-trend.up { color: var(--good); }
+.m-trend.down { color: var(--danger); }
+.m-trend.flat { color: var(--text-dim); }
+
+/* ── kind: image ────────────────────────────────────────────────────── */
+.k-image { margin: 0; position: relative; }
+.i-img {
+  display: block; width: 100%; height: auto; border-radius: 10px;
+  opacity: 0; transform: scale(1.03);
+  transition: opacity 500ms var(--ease-out), transform 700ms var(--ease-out);
+}
+.i-img.loaded { opacity: 1; transform: scale(1); }
+.i-cap { font-size: 14px; color: var(--text-dim); margin-top: 10px; }
+/* ── kind: choice ───────────────────────────────────────────────────── */
+.c-prompt { margin: 0 0 16px; }
+.c-opts { display: flex; flex-wrap: wrap; gap: 10px; }
+.c-opt {
+  padding: 11px 20px; border-radius: 10px; cursor: pointer; font-size: 15px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
+  transition: transform 160ms var(--ease-out), background 160ms, border-color 160ms, box-shadow 200ms;
+  /* 错峰浮现:由 choice.js 设置 --opt-delay。 */
+  animation: opt-in 420ms var(--ease-out) both;
+  animation-delay: var(--opt-delay, 0ms);
+}
+@keyframes opt-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.c-opt:hover { transform: translateY(-2px); border-color: var(--accent); }
+.c-opt.tone-primary { background: var(--accent); border-color: var(--accent); color: #06122a; font-weight: 600; }
+.c-opt.tone-danger { border-color: var(--danger); color: var(--danger); }
+.c-opt.chosen { box-shadow: 0 0 0 2px var(--accent); transform: translateY(0) scale(0.97); }
+
+/* ── kind: weather ──────────────────────────────────────────────────── */
+#stage > .surface[data-kind="weather"] {
+  position: fixed;
+  top: max(20px, calc(env(safe-area-inset-top, 0px) + 16px));
+  right: max(20px, calc(env(safe-area-inset-right, 0px) + 16px));
+  align-self: auto;
+  opacity: 1;
+  background: #151a23;
+  filter: none;
+  max-width: min(320px, calc(100vw - 32px));
+  border-color: rgba(124, 139, 162, 0.42);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.56), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  transform-origin: top right;
+  z-index: 6;
+}
+#stage > .surface[data-kind="weather"]:has(.k-weather.is-week) {
+  max-width: min(460px, calc(100vw - 32px));
+}
+#stage > .surface[data-kind="weather"][data-intent="ambient"] {
+  opacity: 1;
+  filter: none;
+  transform: translateX(0) scale(0.92);
+}
+#stage > .surface[data-kind="weather"].is-entering {
+  animation: weather-enter var(--dur-enter) var(--ease-out) both;
+}
+#stage > .surface[data-kind="weather"].is-exiting {
+  animation: weather-exit var(--dur-exit) var(--ease-in) both;
+}
+#stage > .surface[data-kind="weather"].is-morphing {
+  animation: weather-morph var(--dur-morph) var(--ease-mo);
+}
+@keyframes weather-enter {
+  from { opacity: 0; transform: translateX(64px) scale(0.88); filter: blur(2px); }
+  to   { opacity: 1; transform: translateX(0) scale(0.92); filter: blur(0); }
+}
+@keyframes weather-exit {
+  from { opacity: 1; transform: translateX(0) scale(0.92); }
+  to   { opacity: 0; transform: translateX(72px) scale(0.9); }
+}
+@keyframes weather-morph {
+  0%   { transform: translateX(0) scale(0.92); }
+  35%  { transform: translateX(0) scale(0.94); }
+  100% { transform: translateX(0) scale(0.92); }
+}
+.w-head { display: flex; align-items: center; gap: 16px; }
+.w-ico { font-size: 44px; line-height: 1; }
+.w-now { flex: 1; }
+.w-city { font-size: 20px; font-weight: 600; }
+.w-cond { font-size: 14px; color: var(--text-dim); margin-top: 2px; }
+.w-temp { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; }
+.w-fclist { display: flex; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.w-fc { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.w-fc-day { font-size: 13px; color: var(--text-dim); }
+.w-fc-ico { font-size: 22px; }
+.w-fc-temp { font-size: 13px; }
+.k-weather.is-week .w-fclist {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(42px, 1fr));
+  gap: 8px;
+}
+.k-weather.is-week .w-fc {
+  min-width: 0;
+  gap: 5px;
+}
+.k-weather.is-week .w-fc-day,
+.k-weather.is-week .w-fc-temp {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.k-weather.is-week .w-fc-ico { font-size: 20px; }
+
+/* ── kind: progress ─────────────────────────────────────────────────── */
+.k-progress { min-width: 280px; }
+.pr-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.pr-label { font-size: 15px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-pct { font-size: 15px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pr-track { height: 8px; border-radius: 6px; background: rgba(154, 167, 184, 0.16); overflow: hidden; }
+.pr-fill {
+  height: 100%; width: 0; border-radius: 6px; background: var(--accent);
+  /* width 过渡是 morph 的灵魂:value 一变,进度条平滑推进。 */
+  transition: width var(--dur-morph) var(--ease-mo), background 280ms var(--ease-mo);
+}
+.pr-note { font-size: 13px; color: var(--text-dim); margin-top: 10px; }
+/* 状态色 */
+.k-progress.is-done .pr-fill { background: var(--good); }
+.k-progress.is-done .pr-pct { color: var(--good); }
+.k-progress.is-error .pr-fill { background: var(--danger); }
+.k-progress.is-error .pr-pct { color: var(--danger); }
+.k-progress.is-paused .pr-fill { background: var(--text-dim); }
+/* 不定量:进度未知,用一段来回滑动的条表示"进行中"(忽略 width)。 */
+.k-progress.is-indeterminate .pr-fill {
+  width: 35% !important; transition: none;
+  animation: pr-indet 1.4s ease-in-out infinite;
+}
+@keyframes pr-indet {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(340%); }
+}
+
+/* ── kind: selfcheck ────────────────────────────────────────────────── */
+.k-selfcheck { min-width: 248px; }
+.sc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.sc-icon { font-size: 17px; line-height: 1; }
+.sc-head .sc-title { font-size: 13px; font-weight: 600; color: var(--text-dim); letter-spacing: 0.03em; flex: 1; margin: 0; text-transform: none; }
+.sc-counter { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* running 态 */
+.sc-running { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; animation: sc-pulse 1.2s ease-in-out infinite; }
+@keyframes sc-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+.sc-name { font-size: 15px; font-weight: 600; color: var(--accent); }
+.sc-scan { height: 2px; background: rgba(91, 157, 255, 0.14); border-radius: 1px; overflow: hidden; }
+.sc-scan-bar { height: 100%; width: 30%; border-radius: 1px; background: var(--accent); animation: sc-scan 1.6s ease-in-out infinite; }
+@keyframes sc-scan { 0% { transform: translateX(-100%); opacity: 0.8; } 50% { opacity: 1; } 100% { transform: translateX(380%); opacity: 0.8; } }
+/* done 态 */
+.sc-results { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+.sc-row { display: flex; align-items: center; gap: 9px; font-size: 14px; }
+.sc-row-icon { width: 14px; text-align: center; font-weight: 700; flex-shrink: 0; }
+.sc-row-name { flex: 1; color: var(--text); }
+.sc-row-note { font-size: 12px; color: var(--text-dim); max-width: 120px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-row.is-ok .sc-row-icon { color: var(--good); }
+.sc-row.is-error .sc-row-icon { color: var(--danger); }
+.sc-row.is-skipped .sc-row-icon { color: var(--text-dim); }
+.sc-foot { display: flex; align-items: center; gap: 7px; padding-top: 11px; border-top: 1px solid var(--line); }
+.sc-overall { font-size: 13px; font-weight: 600; }
+.sc-foot.is-ok .sc-overall, .sc-foot.is-ok .sc-overall-icon { color: var(--good); }
+.sc-foot.is-degraded .sc-overall, .sc-foot.is-degraded .sc-overall-icon { color: #facc15; }
+.sc-foot.is-error .sc-overall, .sc-foot.is-error .sc-overall-icon { color: var(--danger); }
+
+/* ── kind: awakening (建议 intent=ambient) ──────────────────────────── */
+.k-awakening { min-width: 240px; }
+.aw-head { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+.aw-emoji { font-size: 16px; line-height: 1; }
+.aw-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-badge { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; color: var(--text-dim); background: rgba(91, 157, 255, 0.12); border: 1px solid rgba(91, 157, 255, 0.2); border-radius: 20px; padding: 2px 8px; flex-shrink: 0; }
+.aw-finding { font-size: 14px; color: var(--text-dim); line-height: 1.55; margin-bottom: 11px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.aw-dots { display: flex; gap: 4px; }
+.aw-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(154, 167, 184, 0.22); transition: background 200ms var(--ease-mo); }
+.aw-dot.active { background: var(--accent); }
+.aw-dot.done { background: rgba(74, 222, 128, 0.55); }
+
+/* ── 排版原语:stack / row / col ────────────────────────────────────── */
+.k-layout { display: flex; }
+.lay-stack { flex-direction: column; }
+.lay-row { flex-direction: row; flex-wrap: wrap; }
+.lay-col { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.gap-sm { gap: 8px; }
+.gap-md { gap: 16px; }
+.gap-lg { gap: 28px; }
+.align-start { align-items: flex-start; }
+.align-center { align-items: center; }
+.align-end { align-items: flex-end; }
+.align-stretch { align-items: stretch; }
+/* 容器内的子 surface 去掉重阴影 / 大圆角,贴合"积木"观感(顶层卡才是主角)。 */
+.k-layout .surface { box-shadow: none; max-width: none; padding: 16px 18px; }
+.k-layout .surface[data-intent="ambient"] { align-self: auto; }
+
+/* ── 未知 kind 的占位降级(SCENE-PROTOCOL §8:不认识不崩溃)─────────── */
+.k-unknown { font-size: 13px; color: var(--text-dim); font-family: ui-monospace, monospace; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, .surface, .surface.is-entering, .surface.is-exiting, .surface.is-morphing {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

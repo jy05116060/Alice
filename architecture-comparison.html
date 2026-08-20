@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Alice · 架构诊断与优化对照</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAFAF9;
+      --paper: #FFFFFF;
+      --ink: #0A0A0A;
+      --sub-ink: #3F3F46;
+      --soft-ink: #71717A;
+      --faint-ink: #A1A1AA;
+      --border: #E4E4E7;
+      --border-soft: #F4F4F5;
+
+      /* Current (warning) — 克制不刺眼 */
+      --red: #B91C1C;
+      --amber: #B45309;
+      --orange: #C2410C;
+      --red-bg: #FEF2F2;
+      --amber-bg: #FFFBEB;
+      --orange-bg: #FFF7ED;
+      --red-line: #FCA5A5;
+
+      /* Optimized (calm) */
+      --teal: #0F766E;
+      --emerald: #047857;
+      --green: #15803D;
+      --teal-bg: #F0FDFA;
+      --emerald-bg: #ECFDF5;
+      --emerald-line: #6EE7B7;
+
+      --neutral-bg: #FAFAF9;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: -0.005em;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      padding: 56px 48px 64px;
+    }
+
+    .canvas {
+      max-width: 1520px;
+      margin: 0 auto;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      margin-bottom: 40px;
+    }
+    .eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--soft-ink);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .eyebrow .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--red);
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .title {
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 14px;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: var(--sub-ink);
+      max-width: 760px;
+      line-height: 1.6;
+    }
+    .subtitle code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      background: var(--border-soft);
+      padding: 1px 6px;
+      border-radius: 3px;
+      color: var(--ink);
+    }
+
+    /* ===== KPI band ===== */
+    .kpi-band {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      border: 1px solid var(--border);
+      background: var(--paper);
+      margin-bottom: 56px;
+    }
+    .kpi-cell {
+      padding: 28px 32px;
+      border-right: 1px solid var(--border);
+    }
+    .kpi-cell:last-child { border-right: none; }
+    .kpi-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--soft-ink);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .kpi-comparison {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+    .kpi-old {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 28px;
+      color: var(--red);
+      font-weight: 500;
+      text-decoration: line-through;
+      text-decoration-color: rgba(185, 28, 28, 0.35);
+    }
+    .kpi-arrow {
+      color: var(--faint-ink);
+      font-size: 20px;
+      font-weight: 300;
+    }
+    .kpi-new {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 38px;
+      color: var(--emerald);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .kpi-delta {
+      margin-top: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--emerald);
+      font-weight: 500;
+    }
+
+    /* ===== Architecture two-col ===== */
+    .arch-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 56px;
+      position: relative;
+    }
+
+    .arch-col-header {
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 18px;
+    }
+    .arch-col-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .arch-col-eyebrow.current { color: var(--red); }
+    .arch-col-eyebrow.optimized { color: var(--emerald); }
+    .arch-col-eyebrow .marker {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .arch-col-eyebrow.current .marker { background: var(--red); }
+    .arch-col-eyebrow.optimized .marker { background: var(--emerald); }
+
+    .arch-col-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+    .arch-col-summary {
+      font-size: 12px;
+      color: var(--soft-ink);
+      margin-top: 6px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Step list */
+    .step-list {
+      position: relative;
+    }
+    .step-list::before {
+      content: '';
+      position: absolute;
+      left: 13px;
+      top: 14px;
+      bottom: 14px;
+      width: 1px;
+      background: var(--border);
+      z-index: 0;
+    }
+
+    .step {
+      position: relative;
+      padding: 12px 0 12px 44px;
+      border-bottom: 1px solid var(--border-soft);
+      min-height: 56px;
+    }
+    .step:last-child {
+      border-bottom: none;
+    }
+
+    .step-marker {
+      position: absolute;
+      left: 4px;
+      top: 14px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--soft-ink);
+      z-index: 2;
+    }
+
+    .step-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 6px;
+      color: var(--ink);
+    }
+
+    .step-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 500;
+      border-radius: 3px;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      color: var(--soft-ink);
+      white-space: nowrap;
+      letter-spacing: 0;
+    }
+    .badge.sync {
+      color: var(--orange);
+      border-color: rgba(194, 65, 12, 0.25);
+      background: var(--orange-bg);
+    }
+    .badge.sync-crit {
+      color: var(--red);
+      border-color: rgba(185, 28, 28, 0.3);
+      background: var(--red-bg);
+    }
+    .badge.async {
+      color: var(--teal);
+      border-color: rgba(15, 118, 110, 0.25);
+      background: var(--teal-bg);
+    }
+    .badge.llm {
+      color: var(--red);
+      border-color: rgba(185, 28, 28, 0.3);
+      background: var(--red-bg);
+      font-weight: 600;
+    }
+    .badge.llm-cool {
+      color: var(--emerald);
+      border-color: rgba(4, 120, 87, 0.3);
+      background: var(--emerald-bg);
+      font-weight: 600;
+    }
+    .badge.token {
+      color: var(--ink);
+      font-weight: 500;
+      background: var(--border-soft);
+      border-color: var(--border);
+    }
+    .badge.time {
+      color: var(--ink);
+      font-weight: 600;
+      background: var(--paper);
+    }
+
+    .step-notes {
+      font-size: 11.5px;
+      color: var(--soft-ink);
+      margin-top: 7px;
+      line-height: 1.5;
+    }
+    .step-notes.unchanged {
+      color: var(--faint-ink);
+      font-style: italic;
+    }
+
+    /* Bottleneck / optimization flag pill */
+    .flag {
+      position: absolute;
+      top: 14px;
+      right: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px 3px 5px;
+      background: var(--red);
+      color: white;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 600;
+      border-radius: 3px;
+      letter-spacing: 0;
+      line-height: 1.1;
+    }
+    .flag.optimization {
+      background: var(--emerald);
+    }
+    .flag.amber {
+      background: var(--amber);
+    }
+    .flag-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      background: rgba(255,255,255,0.22);
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .flag-second {
+      top: 42px;
+    }
+
+    /* Highlighted step backgrounds */
+    .step.has-bottleneck {
+      background: linear-gradient(to right, var(--red-bg) 0%, transparent 85%);
+      padding-left: 52px;
+      margin-left: -8px;
+    }
+    .step.has-bottleneck .step-marker {
+      left: 12px;
+      border-color: var(--red-line);
+      color: var(--red);
+      font-weight: 700;
+    }
+    .step.has-optimization {
+      background: linear-gradient(to left, var(--emerald-bg) 0%, transparent 85%);
+      padding-right: 8px;
+      margin-right: -8px;
+    }
+    .step.has-optimization .step-marker {
+      border-color: var(--emerald-line);
+      color: var(--emerald);
+      font-weight: 700;
+    }
+
+    /* ===== Details grid: 6 changes ===== */
+    .details-section {
+      margin-top: 64px;
+    }
+    .section-header {
+      margin-bottom: 24px;
+    }
+    .section-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 6px;
+    }
+    .section-subtitle {
+      font-size: 13px;
+      color: var(--soft-ink);
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      border: 1px solid var(--border);
+      background: var(--paper);
+    }
+    .detail-card {
+      padding: 22px 24px 24px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .detail-card:nth-child(3n) { border-right: none; }
+    .detail-card:nth-last-child(-n+3) { border-bottom: none; }
+
+    .detail-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: white;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    .detail-symptom {
+      font-size: 13px;
+      color: var(--red);
+      font-weight: 500;
+      margin-bottom: 4px;
+      line-height: 1.45;
+    }
+    .detail-symptom .label,
+    .detail-fix .label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      color: var(--soft-ink);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-right: 8px;
+      display: inline-block;
+      vertical-align: 2px;
+    }
+    .detail-fix {
+      font-size: 13.5px;
+      color: var(--emerald);
+      font-weight: 600;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      line-height: 1.45;
+    }
+    .detail-impact {
+      font-size: 11.5px;
+      color: var(--soft-ink);
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+      line-height: 1.55;
+    }
+    .detail-impact strong {
+      color: var(--emerald);
+      font-weight: 600;
+      display: inline-block;
+      margin-top: 4px;
+    }
+
+    /* ===== Waves ===== */
+    .waves-section {
+      margin-top: 56px;
+    }
+    .waves-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    .wave-card {
+      padding: 22px 24px 18px;
+      border: 1px solid var(--border);
+      background: var(--paper);
+    }
+    .wave-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .wave-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--soft-ink);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .wave-risk {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+    .wave-risk.low {
+      color: var(--emerald);
+      background: var(--emerald-bg);
+      border: 1px solid rgba(4, 120, 87, 0.2);
+    }
+    .wave-risk.medium {
+      color: var(--amber);
+      background: var(--amber-bg);
+      border: 1px solid rgba(180, 83, 9, 0.2);
+    }
+    .wave-card h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.015em;
+    }
+    .wave-time {
+      font-size: 11.5px;
+      color: var(--soft-ink);
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 14px;
+    }
+    .wave-items {
+      list-style: none;
+      padding: 0;
+    }
+    .wave-items li {
+      padding: 7px 0;
+      font-size: 12.5px;
+      color: var(--sub-ink);
+      border-bottom: 1px dashed var(--border-soft);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1.4;
+    }
+    .wave-items li:last-child { border-bottom: none; }
+    .wave-items .item-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--faint-ink);
+      width: 18px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .wave-items .item-num.numbered {
+      color: var(--emerald);
+    }
+
+    /* ===== Legend ===== */
+    .legend {
+      margin-top: 36px;
+      padding: 18px 0;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+      font-size: 11.5px;
+      color: var(--soft-ink);
+      align-items: center;
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--faint-ink);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+
+    <!-- ===== Header ===== -->
+    <div class="header">
+      <div class="eyebrow">
+        <span class="dot"></span>
+        DIAGNOSIS · ALICE v2.1.247 · runTurn() PATH AUDIT
+      </div>
+      <h1 class="title">为什么一条消息要 13.7 秒？</h1>
+      <p class="subtitle">
+        L1 用户消息从抵达到回复的完整链路。左侧是当前架构（数据来自实测 <code>alice.log</code> 14:44 窗口），
+        右侧是不改人格、不删功能、只动执行路径的优化版本。6 个瓶颈点 ↔ 6 个对应改动，编号一一映射。
+      </p>
+    </div>
+
+    <!-- ===== KPI band ===== -->
+    <div class="kpi-band">
+      <div class="kpi-cell">
+        <div class="kpi-label">User-Perceived Latency</div>
+        <div class="kpi-comparison">
+          <span class="kpi-old">13.7s</span>
+          <span class="kpi-arrow">→</span>
+          <span class="kpi-new">1.8s</span>
+        </div>
+        <div class="kpi-delta">−87% · 节省 11.9s 等待</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="kpi-label">LLM Round Trips / Turn</div>
+        <div class="kpi-comparison">
+          <span class="kpi-old">7</span>
+          <span class="kpi-arrow">→</span>
+          <span class="kpi-new">4</span>
+        </div>
+        <div class="kpi-delta">−43% · 主路径从 4 次降到 1 次</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="kpi-label">Prompt Tokens / Turn</div>
+        <div class="kpi-comparison">
+          <span class="kpi-old">~80K</span>
+          <span class="kpi-arrow">→</span>
+          <span class="kpi-new">~19.6K</span>
+        </div>
+        <div class="kpi-delta">−75% · 主轮 15-17K → 9-12K</div>
+      </div>
+    </div>
+
+    <!-- ===== Architecture two-col ===== -->
+    <div class="arch-section">
+
+      <!-- LEFT · Current -->
+      <div class="arch-col">
+        <div class="arch-col-header">
+          <div class="arch-col-eyebrow current"><span class="marker"></span>CURRENT · 当前架构</div>
+          <div class="arch-col-title">11 步全部串行 await</div>
+          <div class="arch-col-summary">13.7s &nbsp;·&nbsp; 7 LLM &nbsp;·&nbsp; ~80K tokens</div>
+        </div>
+        <div class="step-list">
+
+          <div class="step">
+            <div class="step-marker">1</div>
+            <div class="step-title">tryAutoConfigureKey</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge">DB read</span>
+              <span class="badge time">~5ms</span>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">2</div>
+            <div class="step-title">tryHandleDirectWeatherTurn</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge">regex</span>
+              <span class="badge time">~1ms</span>
+            </div>
+          </div>
+
+          <div class="step has-bottleneck">
+            <div class="step-marker">3</div>
+            <div class="step-title">runInjector</div>
+            <div class="step-meta">
+              <span class="badge sync-crit">SYNC BLOCK</span>
+              <span class="badge">15 DB queries</span>
+              <span class="badge llm">1 HTTP</span>
+              <span class="badge time">50-300ms</span>
+            </div>
+            <div class="step-notes">embedding HTTP 800ms 硬超时 + <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#fff;padding:0 4px;border:1px solid var(--border);border-radius:2px;">searchByEmbedding</code> 全表 JS cosine</div>
+            <div class="flag"><span class="flag-num">6</span>EMBED HTTP</div>
+          </div>
+
+          <div class="step has-bottleneck">
+            <div class="step-marker">4</div>
+            <div class="step-title">updateFocusFrame</div>
+            <div class="step-meta">
+              <span class="badge sync-crit">SYNC BLOCK</span>
+              <span class="badge llm">1 LLM</span>
+              <span class="badge time">10-820ms</span>
+            </div>
+            <div class="step-notes">sync 模式 LLM 仲裁 800ms 硬超时 · log 显示常发：「LLM 超时 (实际 812ms) → 回退 v0」</div>
+            <div class="flag"><span class="flag-num">3</span>FOCUS SYNC</div>
+          </div>
+
+          <div class="step has-bottleneck">
+            <div class="step-marker">5</div>
+            <div class="step-title">runRuntimeInjector</div>
+            <div class="step-meta">
+              <span class="badge sync-crit">SYNC BLOCK</span>
+              <span class="badge">6 awaits 串行</span>
+              <span class="badge llm">1-3 LLM</span>
+              <span class="badge time">20-500ms</span>
+            </div>
+            <div class="step-notes">gatherContext 充分性检查最多 3 轮独立 LLM · task && !fast 触发</div>
+            <div class="flag"><span class="flag-num">4</span>GATHER LLM</div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">6</div>
+            <div class="step-title">buildSystemPrompt</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge token">8.8K tokens FIXED</span>
+            </div>
+            <div class="step-notes">Music / Video / WeChat / WeatherCard / Focus Banner 等场景规则常驻不切片</div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">7</div>
+            <div class="step-title">buildContextBlock</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge token">3-6K tokens</span>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">8</div>
+            <div class="step-title">buildLLMMessages</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge">+20-40 history</span>
+            </div>
+          </div>
+
+          <div class="step has-bottleneck">
+            <div class="step-marker">9</div>
+            <div class="step-title">runMemoryRefreshLoop</div>
+            <div class="step-meta">
+              <span class="badge sync-crit">SYNC BLOCK</span>
+              <span class="badge llm">0-6 LLM</span>
+              <span class="badge time">+0-10s</span>
+            </div>
+            <div class="step-notes">3 轮 eval × thinking + 3 轮 search 最坏情况 · fast 用户路径跳过</div>
+            <div class="flag"><span class="flag-num">5</span>REFRESH LOOP</div>
+          </div>
+
+          <div class="step has-bottleneck" style="padding-bottom: 22px;">
+            <div class="step-marker">10</div>
+            <div class="step-title">callLLM 主循环</div>
+            <div class="step-meta">
+              <span class="badge sync-crit">CRITICAL</span>
+              <span class="badge llm">2-N rounds</span>
+              <span class="badge token">15-17K / round</span>
+            </div>
+            <div class="step-notes">
+              send_message 后注入 "Default end" nudge → 强制再跑一轮 LLM 看到 0 tools 才 break。<br>
+              简单 "你好" 也要 2 轮 LLM × 17K tokens = 4-6s 主路径。
+            </div>
+            <div class="flag"><span class="flag-num">1</span>EARLY BREAK</div>
+            <div class="flag flag-second amber"><span class="flag-num">2</span>PROMPT 体积</div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">11</div>
+            <div class="step-title">后处理 + 后台 recognizer</div>
+            <div class="step-meta">
+              <span class="badge async">ASYNC</span>
+              <span class="badge llm">2-3 LLM</span>
+              <span class="badge">不阻塞</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT · Optimized -->
+      <div class="arch-col">
+        <div class="arch-col-header">
+          <div class="arch-col-eyebrow optimized"><span class="marker"></span>OPTIMIZED · 优化后</div>
+          <div class="arch-col-title">不删功能 · 只动执行路径</div>
+          <div class="arch-col-summary">1.8s &nbsp;·&nbsp; 4 LLM &nbsp;·&nbsp; ~19.6K tokens</div>
+        </div>
+        <div class="step-list">
+
+          <div class="step">
+            <div class="step-marker">1</div>
+            <div class="step-title">tryAutoConfigureKey</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge">DB read</span>
+              <span class="badge time">~5ms</span>
+            </div>
+            <div class="step-notes unchanged">不变</div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">2</div>
+            <div class="step-title">tryHandleDirectWeatherTurn</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge time">~1ms</span>
+            </div>
+            <div class="step-notes unchanged">不变</div>
+          </div>
+
+          <div class="step has-optimization">
+            <div class="step-marker">3</div>
+            <div class="step-title">runInjector</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge">DB Promise.all</span>
+              <span class="badge llm-cool">cache 0ms</span>
+              <span class="badge time">30-150ms</span>
+            </div>
+            <div class="step-notes">embedding 进程内 LRU cache（5min TTL，100 项）· memories &gt; 5k 自动跳过全表扫</div>
+            <div class="flag optimization"><span class="flag-num">6</span>LRU CACHE</div>
+          </div>
+
+          <div class="step has-optimization">
+            <div class="step-marker">4</div>
+            <div class="step-title">updateFocusFrame</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge async">LLM async</span>
+              <span class="badge time">10-30ms</span>
+            </div>
+            <div class="step-notes">v0 立返 + LLM 后台 patch · 当前轮看 v0 ngram，下轮看 refined topic</div>
+            <div class="flag optimization"><span class="flag-num">3</span>FULL ASYNC</div>
+          </div>
+
+          <div class="step has-optimization">
+            <div class="step-marker">5</div>
+            <div class="step-title">runRuntimeInjector</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge async">Promise.all</span>
+              <span class="badge time">10-100ms</span>
+            </div>
+            <div class="step-notes">6 个 await 并发 · gatherContext 改启发式（keyword 覆盖度 + 缓存，无 LLM）</div>
+            <div class="flag optimization"><span class="flag-num">4</span>HEURISTIC</div>
+          </div>
+
+          <div class="step has-optimization">
+            <div class="step-marker">6</div>
+            <div class="step-title">buildSystemPrompt</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge token">5-6K tokens 按需</span>
+            </div>
+            <div class="step-notes">沿用 <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#fff;padding:0 4px;border:1px solid var(--border);border-radius:2px;">AGENT_KEYWORD_RE</code> 模式 · Music/Video/WeChat/WeatherCard 命中关键词才注入</div>
+            <div class="flag optimization"><span class="flag-num">2</span>PROMPT 切片</div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">7</div>
+            <div class="step-title">buildContextBlock</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge token">3-6K tokens</span>
+            </div>
+            <div class="step-notes unchanged">不变</div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">8</div>
+            <div class="step-title">buildLLMMessages</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+            </div>
+            <div class="step-notes unchanged">不变</div>
+          </div>
+
+          <div class="step has-optimization">
+            <div class="step-marker">9</div>
+            <div class="step-title">runMemoryRefreshLoop</div>
+            <div class="step-meta">
+              <span class="badge sync">SYNC</span>
+              <span class="badge llm-cool">0-2 LLM</span>
+              <span class="badge time">+0-2s</span>
+            </div>
+            <div class="step-notes">启发式打 confidence 分 · score ≥ 0.7 直通；&lt; 0.4 才进 1 轮 LLM eval</div>
+            <div class="flag optimization"><span class="flag-num">5</span>SCORE 直通</div>
+          </div>
+
+          <div class="step has-optimization" style="padding-bottom: 22px;">
+            <div class="step-marker">10</div>
+            <div class="step-title">callLLM 主循环</div>
+            <div class="step-meta">
+              <span class="badge sync-crit">CRITICAL</span>
+              <span class="badge llm-cool">1-2 rounds</span>
+              <span class="badge token">9-12K / round</span>
+            </div>
+            <div class="step-notes">
+              启发式判 "终结性回答" → send_message 后立即 break。<br>
+              保留 progress 链路（voice / 含"查一下"/有 task / 短消息）走原 nudge 路径。
+            </div>
+            <div class="flag optimization"><span class="flag-num">1</span>EARLY BREAK</div>
+            <div class="flag optimization flag-second"><span class="flag-num">2</span>主轮瘦身</div>
+          </div>
+
+          <div class="step">
+            <div class="step-marker">11</div>
+            <div class="step-title">后处理 + 后台 recognizer</div>
+            <div class="step-meta">
+              <span class="badge async">ASYNC</span>
+              <span class="badge llm-cool">2-3 LLM</span>
+              <span class="badge">不阻塞</span>
+            </div>
+            <div class="step-notes unchanged">不变</div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ===== 6 changes detail grid ===== -->
+    <div class="details-section">
+      <div class="section-header">
+        <h2 class="section-title">6 个改动 · 风险与收益逐项核对</h2>
+        <p class="section-subtitle">每个瓶颈对应一个具体改动 · 不是无脑砍，是带保留路径的替换</p>
+      </div>
+      <div class="details-grid">
+
+        <div class="detail-card">
+          <div class="detail-num">1</div>
+          <div class="detail-symptom"><span class="label">瓶颈</span>send_message 后强制再跑一轮 LLM</div>
+          <div class="detail-fix"><span class="label">改动</span>启发式早 break</div>
+          <div class="detail-impact">
+            条件叠加：fast user path + 非 voice 渠道 + 无 active task + content ≥ 8 字 + 不含 "查一下/看看/稍等/等等" 等 progress 词 + 不以问号结尾。<br>
+            任一不满足 → 保留 nudge 走原路径（progress 链 / TTS 后续 / 任务流程 全部不破）。<br>
+            <strong>省 1-2s · 简单回复延迟降一半</strong>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-num">2</div>
+          <div class="detail-symptom"><span class="label">瓶颈</span>主轮单次 prompt 15-17K tokens</div>
+          <div class="detail-fix"><span class="label">改动</span>system prompt 按需切片</div>
+          <div class="detail-impact">
+            CORE 段 5.5K 常驻（Top-Level / Posture / Response / Meaning-First / Style / 多渠道身份）。<br>
+            Music / Video / WeatherCard / WeChat outbound / Focus Banner / ACUI 用关键词 P1 gate（沿用 AGENT_KEYWORD_RE 模式）。<br>
+            <strong>主轮 tokens ↓ 25-35% · cache miss 部分变小</strong>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-num">3</div>
+          <div class="detail-symptom"><span class="label">瓶颈</span>focus-classifier sync 800ms 硬超时</div>
+          <div class="detail-fix"><span class="label">改动</span>全路径 async 化</div>
+          <div class="detail-impact">
+            TICK / background 不再阻塞当前轮 buildContextBlock。<br>
+            当前轮 &lt;focus&gt; 看 v0 ngram topic，下一轮看 LLM patch 过的 refined topic。<br>
+            代价：TICK 决策的 focus 信号粗 1 轮，影响小。<br>
+            <strong>省 800ms · 每个 TICK 路径</strong>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-num">4</div>
+          <div class="detail-symptom"><span class="label">瓶颈</span>gatherContext 1-3 轮独立 LLM</div>
+          <div class="detail-fix"><span class="label">改动</span>改启发式 + 缓存</div>
+          <div class="detail-impact">
+            task 关键词 vs taskKnowledge 关键词覆盖度 &gt; 0.6 → sufficient。<br>
+            消息提到 .js/.py/.md 路径 → read_file need；提到 "上次/那个" → search_memory need。<br>
+            漏检由主轮 LLM 自己用工具兜底（mustReply 安全网）。<br>
+            <strong>省 3-6s · 任务态触发时</strong>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-num">5</div>
+          <div class="detail-symptom"><span class="label">瓶颈</span>refresh-loop 最多 6 轮 LLM</div>
+          <div class="detail-fix"><span class="label">改动</span>启发式打 confidence 分</div>
+          <div class="detail-impact">
+            baseMemories 数 / 期望召回 + query 关键词覆盖率 + 时间分布（陈旧扣分）+ 类型多样性。<br>
+            score ≥ 0.7 直通；0.4-0.7 跑启发式 expand keywords（无 LLM）；&lt; 0.4 才进 1 轮 LLM eval。<br>
+            <strong>省 5-10s · TICK + 任务触发时</strong>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-num">6</div>
+          <div class="detail-symptom"><span class="label">瓶颈</span>embedding HTTP 800ms + 全表 cosine</div>
+          <div class="detail-fix"><span class="label">改动</span>进程内 LRU cache + 上限保护</div>
+          <div class="detail-impact">
+            focusText hash → 5min TTL · LRU 100 项 · 跨轮复用。<br>
+            memories &gt; 5000 且无 sqlite-vec 时跳过向量召回，FTS5-only 兜底。<br>
+            scaling 防御 + 命中即省。<br>
+            <strong>命中 cache 省 800ms · scaling 风险消除</strong>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== Implementation waves ===== -->
+    <div class="waves-section">
+      <div class="section-header">
+        <h2 class="section-title">分波次实施 · 按风险递增</h2>
+        <p class="section-subtitle">每波都可独立验证 · 不绑死 · 出问题可单波回滚</p>
+      </div>
+      <div class="waves-grid">
+
+        <div class="wave-card">
+          <div class="wave-header">
+            <span class="wave-num">WAVE 1</span>
+            <span class="wave-risk low">ZERO RISK</span>
+          </div>
+          <h3>纯执行路径优化</h3>
+          <div class="wave-time">预估 1-2 天 · 仅技术改动</div>
+          <ul class="wave-items">
+            <li><span class="item-num numbered">3</span> focus-classifier 全路径 async</li>
+            <li><span class="item-num numbered">6</span> embedding LRU cache</li>
+            <li><span class="item-num">—</span> runRuntimeInjector 内部 Promise.all</li>
+            <li><span class="item-num">—</span> set_tick_interval idempotent 化</li>
+          </ul>
+        </div>
+
+        <div class="wave-card">
+          <div class="wave-header">
+            <span class="wave-num">WAVE 2</span>
+            <span class="wave-risk low">LOW RISK</span>
+          </div>
+          <h3>Prompt 工程</h3>
+          <div class="wave-time">预估 2-3 天 · 增量灰度</div>
+          <ul class="wave-items">
+            <li><span class="item-num numbered">2</span> system prompt 按需切片</li>
+            <li><span class="item-num">—</span> 从 Music / Video / WeatherCard 起步</li>
+            <li><span class="item-num">—</span> 按 AGENT_KEYWORD_RE 模式扩展</li>
+            <li><span class="item-num">—</span> 实验 flag + 回归用例</li>
+          </ul>
+        </div>
+
+        <div class="wave-card">
+          <div class="wave-header">
+            <span class="wave-num">WAVE 3</span>
+            <span class="wave-risk medium">MEDIUM · 需 A/B 验证</span>
+          </div>
+          <h3>执行循环重构</h3>
+          <div class="wave-time">预估 3-5 天 · 触行为面</div>
+          <ul class="wave-items">
+            <li><span class="item-num numbered">1</span> send_message 启发式早 break</li>
+            <li><span class="item-num numbered">4</span> gatherContext 启发式版</li>
+            <li><span class="item-num numbered">5</span> refresh-loop confidence 打分</li>
+            <li><span class="item-num">—</span> 收尾 nudge 整合去重</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== Legend ===== -->
+    <div class="legend">
+      <div class="legend-item"><span class="badge sync">SYNC</span> 同步</div>
+      <div class="legend-item"><span class="badge sync-crit">SYNC BLOCK</span> 同步阻塞主路径</div>
+      <div class="legend-item"><span class="badge async">ASYNC</span> 异步 / 不阻塞</div>
+      <div class="legend-item"><span class="badge llm">N LLM</span> 网络往返</div>
+      <div class="legend-item"><span class="badge llm-cool">N LLM</span> 优化后调用</div>
+      <div class="legend-item"><span class="badge token">N tokens</span> Prompt 体积</div>
+      <div class="legend-item"><span class="badge time">XXms</span> 估算耗时</div>
+    </div>
+
+    <!-- ===== Footer ===== -->
+    <div class="footer">
+      <span>ALICE v2.1.247 · runTurn() PATH AUDIT · 2026-05-30</span>
+      <span>CREATED BY HUASHU-DESIGN</span>
+    </div>
+
+  </div>
+</body>
+</html>

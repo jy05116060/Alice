@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>桌宠</title>
+<!--
+  桌宠窗口的渲染页。
+
+  **诚实声明（重要）**：这里**没有真实的宠物图片资产**。DSH 的 `skills/` 目录在
+  实际安装的 node_modules 里不存在，所以拿不到内置精灵图。本页因此**只用纯 CSS +
+  字符**画出状态示意（气泡 + 光晕），并把「精灵图机制」完整实现但不预置任何图像：
+  若 `pets/` 下存在 sprite 图，`applySprite()` 会真的用它；不存在就回落到示意图形。
+  **绝不伪造图片数据。**
+
+  数据来源：本窗口**自己连 SSE**（不经主进程转发推理帧），所以关窗即断流，
+  宿主侧「最后一个消费者断开 → 停止订阅」的收工条件自然成立。
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: transparent; overflow: hidden;
+    /* 桌宠是旁观者：默认不吃鼠标事件，避免挡住用户点击下面的窗口 */
+    -webkit-user-select: none; user-select: none;
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  }
+  #pet-root {
+    position: relative; width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end;
+    /* 只有宠物本体可拖拽（-webkit-app-region: drag 由 JS 按状态开） */
+  }
+  #pet-body {
+    width: 64%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #7fd4ff, #2b6ea8 65%, #123049);
+    box-shadow: 0 0 18px rgba(90, 190, 255, .55);
+    transition: background .25s ease, box-shadow .25s ease, transform .25s ease;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; line-height: 1; color: #eaf6ff;
+    /* 宠物本体可拖动窗口，方便用户挪开 */
+    -webkit-app-region: drag;
+  }
+  /* 状态配色：与状态机的 4 个终态一一对应 */
+  #pet-root[data-status="running"] #pet-body {
+    background: radial-gradient(circle at 35% 30%, #9ff0b4, #2f8f4e 65%, #10321f);
+    box-shadow: 0 0 22px rgba(90, 240, 150, .6);
+    animation: pet-breathe 1.6s ease-in-out infinite;
+  }
+  #pet-root[data-status="waiting"] #pet-body {
+    background: radial-gradient(circle at 35% 30%, #ffd479, #b8862b 65%, #3a2a06);
+    box-shadow: 0 0 22px rgba(255, 205, 110, .65);
+    animation: pet-pulse 1s ease-in-out infinite;
+  }
+  #pet-root[data-status="error"] #pet-body {
+    background: radial-gradient(circle at 35% 30%, #ff9a8b, #b03a2e 65%, #3a0f0a);
+    box-shadow: 0 0 22px rgba(255, 120, 100, .7);
+    animation: pet-shake .45s ease-in-out 2;
+  }
+  @keyframes pet-breathe { 0%,100% { transform: scale(1) } 50% { transform: scale(1.05) } }
+  @keyframes pet-pulse   { 0%,100% { transform: scale(1) } 50% { transform: scale(1.1) } }
+  @keyframes pet-shake   { 0%,100% { transform: translateX(0) } 25% { transform: translateX(-4px) }
+                           75% { transform: translateX(4px) } }
+  /* 精灵图模式：有资产时替换掉上面的纯 CSS 球 */
+  #pet-sprite {
+    display: none; width: 100%; height: 100%;
+    background-repeat: no-repeat; image-rendering: pixelated;
+    -webkit-app-region: drag;
+  }
+  #pet-root[data-sprite="on"] #pet-body { display: none; }
+  #pet-root[data-sprite="on"] #pet-sprite { display: block; }
+
+  /* 气泡：显示 agent 在想什么 / 在用什么工具 / 任务进度 */
+  #pet-bubble {
+    position: absolute; bottom: 78%; left: 50%; transform: translateX(-50%);
+    max-width: 90%; box-sizing: border-box;
+    padding: 6px 9px; border-radius: 10px;
+    background: rgba(16, 22, 30, .88);
+    border: 1px solid rgba(120, 190, 255, .35);
+    color: #dceaf7; font-size: 11px; line-height: 1.35;
+    word-break: break-word; white-space: pre-wrap;
+    opacity: 0; transition: opacity .2s ease;
+    pointer-events: none;
+  }
+  #pet-bubble[data-visible="on"] { opacity: 1; }
+  #pet-bubble[data-kind="tool"] { border-color: rgba(150, 255, 200, .5); color: #d6ffe8; }
+  #pet-bubble[data-kind="reasoning"] { border-color: rgba(190, 170, 255, .5); color: #e8e2ff; }
+  /* 任务行：单独一行，用省略号收尾（服务端已按码点截 40） */
+  #pet-task {
+    position: absolute; bottom: 2%; left: 50%; transform: translateX(-50%);
+    max-width: 96%; box-sizing: border-box;
+    padding: 3px 7px; border-radius: 8px;
+    background: rgba(16, 22, 30, .8);
+    color: #b9cde0; font-size: 10px; line-height: 1.3;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    opacity: 0; transition: opacity .2s ease; pointer-events: none;
+  }
+  #pet-task[data-visible="on"] { opacity: 1; }
+</style>
+</head>
+<body>
+  <div id="pet-root" data-status="" data-sprite="off" data-connection="connecting">
+    <div id="pet-bubble" data-visible="off" data-kind=""></div>
+    <div id="pet-sprite" role="img" aria-label="桌宠"></div>
+    <div id="pet-body">🐴</div>
+    <div id="pet-task" data-visible="off"></div>
+  </div>
+  <script type="module" src="./pet-renderer.js"></script>
+</body>
+</html>

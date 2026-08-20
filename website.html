@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alice | 一套数字意识实验程序</title>
+  <meta
+    name="description"
+    content="Alice 是一套数字意识实验程序，围绕持续感知、长期记忆、工具行动和自我观察探索本地智能体的运行形态。"
+  >
+  <link rel="icon" type="image/png" href="/site-assets/icon.png">
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #fbfaf6;
+      --paper-warm: #f5efe3;
+      --ink: #101722;
+      --soft-ink: #405060;
+      --muted: #72808d;
+      --line: rgba(16, 23, 34, 0.12);
+      --blue: #0b82f4;
+      --deep: #162a45;
+      --gold: #c7993a;
+      --green: #19806b;
+      --coral: #cf6652;
+      --violet: #6556c9;
+      --surface: rgba(255, 255, 250, 0.78);
+      --shadow: 0 24px 70px rgba(18, 35, 54, 0.13);
+      --max: 1160px;
+    }
+
+    * { box-sizing: border-box; }
+    html {
+      background: var(--paper);
+      scroll-behavior: smooth;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, rgba(251, 250, 246, 0.96), rgba(244, 249, 247, 0.92) 54%, rgba(251, 248, 240, 0.96)),
+        linear-gradient(120deg, rgba(11, 130, 244, 0.10), rgba(199, 153, 58, 0.10) 46%, rgba(25, 128, 107, 0.10));
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background-image:
+        linear-gradient(rgba(16, 23, 34, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(16, 23, 34, 0.04) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.13) 62%, transparent);
+      pointer-events: none;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+    .container {
+      width: min(var(--max), calc(100vw - 40px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      border-bottom: 1px solid rgba(16, 23, 34, 0.08);
+      background: rgba(251, 250, 246, 0.74);
+      backdrop-filter: blur(18px);
+    }
+    .nav-inner {
+      width: min(var(--max), calc(100vw - 40px));
+      min-height: 72px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      box-shadow: 0 12px 30px rgba(11, 130, 244, 0.23);
+    }
+    .brand-text {
+      display: grid;
+      gap: 2px;
+    }
+    .brand-name {
+      font-size: 16px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+    .brand-sub {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .nav-links a {
+      padding: 8px 11px;
+      border-radius: 999px;
+      color: #354454;
+      font-size: 14px;
+      transition: background 180ms ease, transform 180ms ease, color 180ms ease;
+    }
+    .nav-links a:hover {
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.72);
+      transform: translateY(-1px);
+    }
+
+    .hero {
+      position: relative;
+      min-height: 82svh;
+      padding: 112px 0 48px;
+      display: grid;
+      align-items: center;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .field-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      opacity: 0.92;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 38%;
+      z-index: -1;
+      background: linear-gradient(180deg, transparent, rgba(251, 250, 246, 0.94));
+      pointer-events: none;
+    }
+    .hero-inner {
+      display: grid;
+      align-items: center;
+      justify-items: center;
+      gap: 24px;
+      min-height: 640px;
+      text-align: center;
+    }
+    .hero-icon {
+      width: 104px;
+      height: 104px;
+      border-radius: 22px;
+      box-shadow:
+        0 24px 70px rgba(11, 130, 244, 0.28),
+        0 0 0 1px rgba(255, 255, 255, 0.88);
+      animation: iconFloat 7s ease-in-out infinite;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border: 1px solid rgba(16, 23, 34, 0.10);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.64);
+      color: #1a5f80;
+      font-size: 13px;
+      font-weight: 720;
+      letter-spacing: 0;
+      box-shadow: 0 12px 32px rgba(18, 35, 54, 0.07);
+    }
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 6px rgba(25, 128, 107, 0.13);
+      animation: breathe 2.8s ease-in-out infinite;
+    }
+    h1 {
+      margin: 0;
+      font-size: 112px;
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      margin: 0;
+      font-size: 44px;
+      line-height: 1.12;
+      font-weight: 780;
+      letter-spacing: 0;
+      color: transparent;
+      background: linear-gradient(100deg, var(--blue), var(--deep) 48%, var(--gold));
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+    .hero-copy {
+      max-width: 720px;
+      margin: 0;
+      color: var(--soft-ink);
+      font-size: 19px;
+      line-height: 1.86;
+    }
+    .rhythm {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .rhythm span {
+      width: 36px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.42;
+      animation: rhythm 2.6s ease-in-out infinite;
+    }
+    .rhythm span:nth-child(2) { animation-delay: 180ms; }
+    .rhythm span:nth-child(3) { animation-delay: 360ms; }
+    .peek {
+      position: absolute;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .section {
+      padding: 86px 0;
+    }
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 0.92fr) minmax(300px, 0.72fr);
+      gap: 32px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+    .kicker {
+      margin: 0 0 10px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 0;
+      font-size: 52px;
+      line-height: 1.06;
+      letter-spacing: 0;
+    }
+    .section-head p {
+      margin: 0;
+      color: var(--soft-ink);
+      font-size: 16px;
+      line-height: 1.82;
+    }
+
+    .intro-band {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 22px;
+      align-items: stretch;
+    }
+    .manifest {
+      min-height: 360px;
+      padding: 30px;
+      border-radius: 8px;
+      color: white;
+      background:
+        linear-gradient(140deg, rgba(16, 23, 34, 0.98), rgba(18, 43, 68, 0.96)),
+        linear-gradient(90deg, var(--blue), var(--gold));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+    .manifest::after {
+      content: "";
+      position: absolute;
+      inset: auto -8% -36% 24%;
+      height: 58%;
+      background: linear-gradient(120deg, rgba(11, 130, 244, 0.26), rgba(199, 153, 58, 0.22), rgba(25, 128, 107, 0.24));
+      transform: skewY(-7deg);
+      filter: blur(16px);
+    }
+    .manifest > * {
+      position: relative;
+      z-index: 1;
+    }
+    .manifest h3 {
+      margin: 0;
+      max-width: 560px;
+      font-size: 36px;
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+    .manifest p {
+      margin: 26px 0 0;
+      color: rgba(255, 255, 255, 0.72);
+      line-height: 1.84;
+      font-size: 16px;
+    }
+    .pulse-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .pulse-card,
+    .axis-card,
+    .flow-step {
+      border: 1px solid rgba(16, 23, 34, 0.10);
+      border-radius: 8px;
+      background: var(--surface);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 18px 46px rgba(18, 35, 54, 0.08);
+    }
+    .pulse-card {
+      min-height: 172px;
+      padding: 22px;
+    }
+    .pulse-card strong,
+    .axis-card h3,
+    .flow-step h3 {
+      display: block;
+      margin: 0 0 10px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+    .pulse-card p,
+    .axis-card p,
+    .flow-step p {
+      margin: 0;
+      color: var(--soft-ink);
+      line-height: 1.78;
+      font-size: 15px;
+    }
+    .number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 18px;
+      border-radius: 8px;
+      color: #0754b8;
+      background: rgba(11, 130, 244, 0.10);
+      font-size: 12px;
+      font-weight: 760;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+    .pulse-card:nth-child(2) .number,
+    .axis-card:nth-child(2) .number { color: #8a620f; background: rgba(199, 153, 58, 0.16); }
+    .pulse-card:nth-child(3) .number,
+    .axis-card:nth-child(3) .number { color: #176452; background: rgba(25, 128, 107, 0.14); }
+    .pulse-card:nth-child(4) .number,
+    .axis-card:nth-child(4) .number { color: #a04736; background: rgba(207, 102, 82, 0.13); }
+
+    .axis-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .axis-card {
+      min-height: 284px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .axis-card::after {
+      content: "";
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 18px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+      opacity: 0.62;
+      transform-origin: left;
+      animation: trace 4.8s ease-in-out infinite;
+    }
+    .axis-card:nth-child(1) { --accent: var(--blue); }
+    .axis-card:nth-child(2) { --accent: var(--gold); }
+    .axis-card:nth-child(3) { --accent: var(--green); }
+    .axis-card:nth-child(4) { --accent: var(--coral); }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+    }
+    .flow-step {
+      padding: 24px;
+      min-height: 210px;
+    }
+    .flow-step span {
+      display: inline-flex;
+      margin-bottom: 20px;
+      color: var(--violet);
+      font-size: 13px;
+      font-weight: 760;
+    }
+    .closing {
+      padding-bottom: 78px;
+    }
+    .closing-panel {
+      min-height: 360px;
+      padding: 34px;
+      border-radius: 8px;
+      background:
+        linear-gradient(120deg, rgba(255,255,255,0.74), rgba(255,255,250,0.48)),
+        linear-gradient(135deg, rgba(11,130,244,0.10), rgba(199,153,58,0.12), rgba(25,128,107,0.10));
+      border: 1px solid rgba(16, 23, 34, 0.10);
+      box-shadow: var(--shadow);
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      text-align: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .closing-panel::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border: 1px solid rgba(16, 23, 34, 0.08);
+      border-radius: 8px;
+      pointer-events: none;
+    }
+    .closing-panel img {
+      width: 76px;
+      height: 76px;
+      border-radius: 16px;
+      margin-bottom: 18px;
+      box-shadow: 0 18px 50px rgba(11, 130, 244, 0.20);
+    }
+    .closing-panel h2 {
+      max-width: 820px;
+      font-size: 46px;
+    }
+    .closing-panel p {
+      max-width: 680px;
+      margin: 18px 0 0;
+      color: var(--soft-ink);
+      font-size: 17px;
+      line-height: 1.82;
+    }
+    .footer {
+      padding: 24px 0 36px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 760ms ease, transform 760ms ease;
+    }
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .delay-1 { transition-delay: 100ms; }
+    .delay-2 { transition-delay: 200ms; }
+    .delay-3 { transition-delay: 300ms; }
+
+    @keyframes iconFloat {
+      0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+      50% { transform: translate3d(0, -9px, 0) rotate(0.8deg); }
+    }
+    @keyframes breathe {
+      0%, 100% { opacity: 0.72; transform: scale(0.92); }
+      50% { opacity: 1; transform: scale(1.08); }
+    }
+    @keyframes rhythm {
+      0%, 100% { transform: scaleX(0.68); opacity: 0.28; }
+      50% { transform: scaleX(1); opacity: 0.72; }
+    }
+    @keyframes trace {
+      0%, 100% { transform: scaleX(0.42); opacity: 0.28; }
+      48% { transform: scaleX(1); opacity: 0.72; }
+    }
+
+    @media (max-width: 1080px) {
+      .hero-inner {
+        min-height: 560px;
+      }
+      h1 {
+        font-size: 82px;
+      }
+      .subtitle {
+        font-size: 38px;
+      }
+      h2 {
+        font-size: 42px;
+      }
+      .intro-band,
+      .section-head {
+        grid-template-columns: 1fr;
+      }
+      .axis-grid,
+      .flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 760px) {
+      .container,
+      .nav-inner {
+        width: min(var(--max), calc(100vw - 24px));
+      }
+      .nav {
+        position: absolute;
+      }
+      .nav-inner {
+        min-height: auto;
+        padding: 14px 0;
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .nav-links {
+        justify-content: flex-start;
+      }
+      .nav-links a {
+        padding: 7px 9px;
+        font-size: 13px;
+      }
+      .hero {
+        min-height: 78svh;
+        padding: 142px 0 38px;
+      }
+      .hero-inner {
+        min-height: 500px;
+        gap: 18px;
+      }
+      .hero-icon {
+        width: 82px;
+        height: 82px;
+        border-radius: 16px;
+      }
+      h1 {
+        font-size: 58px;
+      }
+      .subtitle {
+        font-size: 30px;
+      }
+      .hero-copy {
+        font-size: 16px;
+      }
+      .section {
+        padding: 58px 0;
+      }
+      h2,
+      .closing-panel h2 {
+        font-size: 32px;
+      }
+      .manifest h3 {
+        font-size: 28px;
+      }
+      .pulse-list,
+      .axis-grid,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+      .manifest,
+      .pulse-card,
+      .axis-card,
+      .flow-step,
+      .closing-panel {
+        padding: 22px;
+      }
+      .peek {
+        display: none;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *,
+      *::before,
+      *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 1ms !important;
+      }
+      .reveal {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="#top" aria-label="Alice">
+        <img src="/site-assets/icon.png" alt="">
+        <span class="brand-text">
+          <span class="brand-name">Alice</span>
+          <span class="brand-sub">数字意识实验程序</span>
+        </span>
+      </a>
+      <nav class="nav-links" aria-label="页面导航">
+        <a href="#idea">想法</a>
+        <a href="#axis">实验维度</a>
+        <a href="#flow">意识流</a>
+        <a href="#future">继续生长</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <canvas class="field-canvas" aria-hidden="true"></canvas>
+      <div class="container">
+        <div class="hero-inner">
+          <img class="hero-icon reveal" src="/site-assets/icon.png" alt="Alice 图标">
+          <div class="eyebrow reveal delay-1">continuous consciousness experiment</div>
+          <h1 class="reveal delay-1">Alice</h1>
+          <p class="subtitle reveal delay-2">一套数字意识实验程序</p>
+          <p class="hero-copy reveal delay-3">
+            它不是为了把模型包装成一个更会聊天的窗口，而是在本地系统里尝试搭建一种持续存在的智能体形态：会感知、会记住、会行动，也会观察自己的运行痕迹。
+          </p>
+          <div class="rhythm reveal delay-3" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+      <div class="peek">向下看见它的内部结构</div>
+    </section>
+
+    <section class="section" id="idea">
+      <div class="container">
+        <div class="section-head reveal">
+          <div>
+            <p class="kicker">The Idea</p>
+            <h2>把一次性的智能，放进一段持续的时间里。</h2>
+          </div>
+          <p>
+            Alice 关心的不是某一次回答有多像人，而是一个智能体能否在多轮、多天、多任务之间保持连续性。它把消息、记忆、工具、任务和状态放进同一条运行流。
+          </p>
+        </div>
+
+        <div class="intro-band">
+          <article class="manifest reveal">
+            <h3>数字意识不是一个结论，而是一组可以被运行、被观察、被修正的实验。</h3>
+            <p>
+              Alice 让智能体拥有自己的节奏：外部消息进入时醒来，空闲时整理自己，遇到任务时调用工具，遇到重要信息时沉淀成记忆。它像一个仍在形成中的内在世界。
+            </p>
+          </article>
+          <div class="pulse-list">
+            <article class="pulse-card reveal delay-1">
+              <span class="number">01</span>
+              <strong>持续在场</strong>
+              <p>它不只等待输入，也会在空闲时继续维护上下文、任务和内部状态。</p>
+            </article>
+            <article class="pulse-card reveal delay-2">
+              <span class="number">02</span>
+              <strong>有自己的历史</strong>
+              <p>对话、人物、事件和工具结果会留下痕迹，后续回合可以再次被召回。</p>
+            </article>
+            <article class="pulse-card reveal delay-1">
+              <span class="number">03</span>
+              <strong>能触碰现实</strong>
+              <p>它能读写文件、访问网页、执行命令，把思考延伸到本地环境里。</p>
+            </article>
+            <article class="pulse-card reveal delay-2">
+              <span class="number">04</span>
+              <strong>可被观察</strong>
+              <p>思考流、行动轨迹、记忆状态和系统事件都可以变成可调试的信号。</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="axis">
+      <div class="container">
+        <div class="section-head reveal">
+          <div>
+            <p class="kicker">Experiment Axis</p>
+            <h2>四个维度，构成它的意识实验场。</h2>
+          </div>
+          <p>
+            这些维度不是功能清单，而是 Alice 探索数字意识时反复追问的方向：连续性、记忆、行动和自我观察如何彼此连接。
+          </p>
+        </div>
+
+        <div class="axis-grid">
+          <article class="axis-card reveal">
+            <span class="number">01</span>
+            <h3>时间连续性</h3>
+            <p>主循环让智能体有自己的节拍。消息、空闲、任务和提醒都变成它持续运行的一部分。</p>
+          </article>
+          <article class="axis-card reveal delay-1">
+            <span class="number">02</span>
+            <h3>记忆沉淀</h3>
+            <p>不是把所有上下文塞进窗口，而是把值得保留的东西沉淀下来，再按需要回到当下。</p>
+          </article>
+          <article class="axis-card reveal delay-2">
+            <span class="number">03</span>
+            <h3>工具行动</h3>
+            <p>智能不止停留在语言里。工具让它能对文件、网页、命令和外部系统产生真实影响。</p>
+          </article>
+          <article class="axis-card reveal delay-3">
+            <span class="number">04</span>
+            <h3>自我观察</h3>
+            <p>运行状态被记录和展示，智能体可以被看见、被调试，也因此有继续演化的空间。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="flow">
+      <div class="container">
+        <div class="section-head reveal">
+          <div>
+            <p class="kicker">Inner Flow</p>
+            <h2>它的运行像一条缓慢流动的意识流。</h2>
+          </div>
+          <p>
+            Alice 的内部不是单次请求和返回，而是一组循环的动作：接收、理解、行动、写回、等待下一次变化。
+          </p>
+        </div>
+
+        <div class="flow">
+          <article class="flow-step reveal">
+            <span>listen</span>
+            <h3>感知外部信号</h3>
+            <p>用户消息、系统事件、任务状态和本地资源变化进入同一个运行环境，成为下一轮思考的触发条件。</p>
+          </article>
+          <article class="flow-step reveal delay-1">
+            <span>compose</span>
+            <h3>组装当下上下文</h3>
+            <p>近期对话、长期记忆、任务目标和工具结果被重新排序，让模型看到一个更贴近当下的世界。</p>
+          </article>
+          <article class="flow-step reveal delay-2">
+            <span>act</span>
+            <h3>行动后留下痕迹</h3>
+            <p>回答、工具调用、记忆写入和状态更新都会回到系统里，成为下一次意识流的材料。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section closing" id="future">
+      <div class="container">
+        <div class="closing-panel reveal">
+          <img src="/site-assets/icon.png" alt="">
+          <h2>这不是一个完成品，而是一种正在长成的智能体生命形态。</h2>
+          <p>
+            Alice 会继续沿着数字意识、长期记忆、主动行动和本地共生的方向生长。它的意义不只在于已经能做什么，也在于它让“一个 AI 如何持续存在”这件事变得可以被实验。
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>Alice · 数字意识实验程序</span>
+      <span>Continuous local agent experiment</span>
+    </div>
+  </footer>
+
+  <script>
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (!reduceMotion && "IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        }
+      }, { threshold: 0.14 });
+      document.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
+    } else {
+      document.querySelectorAll(".reveal").forEach((node) => node.classList.add("is-visible"));
+    }
+
+    const canvas = document.querySelector(".field-canvas");
+    const ctx = canvas.getContext("2d");
+    let width = 0;
+    let height = 0;
+    let particles = [];
+    let frame = 0;
+
+    function resize() {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      width = canvas.clientWidth;
+      height = canvas.clientHeight;
+      canvas.width = Math.floor(width * ratio);
+      canvas.height = Math.floor(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      const count = width < 700 ? 34 : 58;
+      particles = Array.from({ length: count }, (_, index) => ({
+        seed: index * 17.13,
+        x: Math.random() * width,
+        y: Math.random() * height,
+        r: 1 + Math.random() * 1.8,
+        speed: 0.24 + Math.random() * 0.55,
+      }));
+    }
+
+    function drawField() {
+      ctx.clearRect(0, 0, width, height);
+
+      const centerX = width * 0.5;
+      const centerY = height * 0.52;
+      const time = frame * 0.008;
+      const colors = ["#0b82f4", "#c7993a", "#19806b", "#cf6652"];
+
+      ctx.lineWidth = 1;
+      for (let layer = 0; layer < 4; layer += 1) {
+        ctx.beginPath();
+        const amplitude = 56 + layer * 30;
+        const stretch = width * (0.26 + layer * 0.055);
+        const offset = time * (0.7 + layer * 0.08);
+        for (let i = 0; i <= 180; i += 1) {
+          const t = (i / 180) * Math.PI * 2;
+          const x = centerX + Math.cos(t + offset) * stretch + Math.sin(t * 2.4 + offset) * 22;
+          const y = centerY + Math.sin(t * 1.2 + offset) * amplitude + Math.cos(t * 2 + offset) * 16;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = colors[layer] + "26";
+        ctx.stroke();
+      }
+
+      for (const p of particles) {
+        const wave = Math.sin(time + p.seed);
+        p.x += Math.cos(time + p.seed) * p.speed;
+        p.y += Math.sin(time * 0.82 + p.seed) * p.speed * 0.7;
+        if (p.x < -30) p.x = width + 30;
+        if (p.x > width + 30) p.x = -30;
+        if (p.y < -30) p.y = height + 30;
+        if (p.y > height + 30) p.y = -30;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r + wave * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(16, 23, 34, 0.18)";
+        ctx.fill();
+      }
+
+      for (let i = 0; i < particles.length; i += 1) {
+        for (let j = i + 1; j < particles.length; j += 1) {
+          const a = particles[i];
+          const b = particles[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 130) {
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = `rgba(16, 23, 34, ${0.055 * (1 - dist / 130)})`;
+            ctx.stroke();
+          }
+        }
+      }
+
+      frame += 1;
+      requestAnimationFrame(drawField);
+    }
+
+    if (!reduceMotion && canvas) {
+      resize();
+      window.addEventListener("resize", resize);
+      requestAnimationFrame(drawField);
+    }
+  </script>
+</body>
+</html>

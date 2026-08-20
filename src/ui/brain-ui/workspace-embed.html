@@ -1,0 +1,3144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工作区 · DSH 复刻</title>
+<style>
+/* ===== DSH 主题令牌（取自 @deepseek-ai/dsh-client-ui-theme 暗色映射） ===== */
+:root{
+  --dsw-static-neutral-bluish-00:#fff;
+  --dsw-static-neutral-bluish-950:#151517;
+  --dsw-static-neutral-bluish-900:#1b1b1c;
+  --dsw-static-neutral-bluish-875:#232324;
+  --dsw-static-neutral-bluish-850:#2c2c2e;
+  --dsw-static-neutral-bluish-800:#353638;
+  --dsw-static-neutral-bluish-750:#43454a;
+  --dsw-static-neutral-bluish-600:#81858c;
+  --dsw-static-neutral-bluish-400:#adb2b8;
+  --dsw-static-neutral-bluish-300:#cfd3d6;
+  --dsw-static-neutral-bluish-50:#f9fafb;
+  --dsw-static-deepseek-400:#679efe;
+  --dsw-static-deepseek-500:#4176e6;
+  --dsw-static-amber-500:#f59e0b;
+  --dsw-static-red-400:#f25a5a;
+  --dsw-static-red-600:#ec1313;
+
+  --dsw-alias-bg-base:var(--dsw-static-neutral-bluish-950);
+  --dsw-alias-bg-layer-1:var(--dsw-static-neutral-bluish-875);
+  --dsw-alias-bg-layer-2:var(--dsw-static-neutral-bluish-850);
+  --dsw-alias-bg-layer-3:var(--dsw-static-neutral-bluish-800);
+  --dsw-alias-label-primary:var(--dsw-static-neutral-bluish-50);
+  --dsw-alias-label-secondary:var(--dsw-static-neutral-bluish-300);
+  --dsw-alias-label-tertiary:var(--dsw-static-neutral-bluish-400);
+  --dsw-alias-label-caption:var(--dsw-static-neutral-bluish-600);
+  --dsw-alias-label-dimmed:var(--dsw-static-neutral-bluish-750);
+  --dsw-alias-interactive-bg-hover:rgba(255,255,255,.08);
+  --dsw-alias-interactive-bg-hover-solid:var(--dsw-static-neutral-bluish-800);
+  --dsw-alias-state-business-primary:var(--dsw-static-deepseek-400);
+  --dsw-alias-state-warn-primary:var(--dsw-static-amber-500);
+  --dsw-alias-state-error-primary:var(--dsw-static-red-400);
+  --dsw-alias-border-l4:rgba(255,255,255,.16);
+  --dsw-alias-button-elevated-fill:var(--dsw-static-neutral-bluish-750);
+  --dsw-alias-button-floating-fill:var(--dsw-static-neutral-bluish-850);
+  --dsw-alias-button-floating-hover:var(--dsw-static-neutral-bluish-800);
+  --dsw-alias-tooltip-bg:var(--dsw-static-neutral-bluish-850);
+  --dsw-static-amber-900:#27241f;
+  --dsw-static-amber-600:#dd8629;
+  --dsw-static-neutral-550:#65676b;
+  --dsw-static-neutral-600:#545557;
+  --dsw-alias-state-warn-tertiary:var(--dsw-static-amber-900);
+  --dsw-alias-state-warn-label:var(--dsw-static-amber-600);
+  --dsw-alias-markdown-code-block:var(--dsw-static-neutral-bluish-900);
+  --dsw-alias-markdown-code-block-banner:var(--dsw-static-neutral-bluish-850);
+  --dsw-alias-border-l1:#ffffff0f;
+  --dsw-alias-border-l2:#ffffff1f;
+  --dsw-alias-scrollbar-bg-l2:var(--dsw-static-neutral-600);
+  --dsw-alias-scrollbar-hover-l2:var(--dsw-static-neutral-550);
+  --dsw-elevation-stroke-color:var(--dsw-alias-border-l4);
+  --dsw-elevation-stroke:0 0 0 .5px var(--dsw-elevation-stroke-color);
+  --dsw-elevation-prominent:var(--dsw-elevation-stroke), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d;
+  --dsw-specific-menu:var(--dsw-alias-bg-layer-3);
+  --ds-font-family-code:"SF Mono","JetBrains Mono","Fira Code",Consolas,"Liberation Mono",Menlo,Courier,"PingFang SC","Microsoft YaHei",monospace;
+  --dsw-font-markdown-code-block-small:11px/16px var(--ds-font-family-code);
+  --dsh-sidebar-inline-padding:12px;
+  --ds-ease-in-out:cubic-bezier(.4,0,.2,1);
+  --ds-transition-duration-slow:.18s;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--dsw-alias-bg-base);
+  color:var(--dsw-alias-label-primary);
+  font:400 14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+.app{display:flex;height:100vh}
+
+/* ===== 侧边栏（ui-sidebar 宿主，工作区面板落在 sidebar.workspaces 槽） ===== */
+.sidebar{
+  width:288px;flex:none;height:100%;
+  background:var(--dsw-alias-bg-base);
+  display:flex;flex-direction:column;
+  padding:0 var(--dsh-sidebar-inline-padding);
+  border-right:.5px solid rgba(255,255,255,.06);
+}
+.brand{height:48px;flex:none;display:flex;align-items:center;gap:8px;padding-left:4px}
+.brand-mark{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#679efe,#4176e6)}
+.brand-name{font-size:13px;color:var(--dsw-alias-label-secondary)}
+
+/* ---- 工作区面板根 ---- */
+.ws-root{
+  --dsh-session-list-edge-inset:var(--dsh-sidebar-inline-padding);
+  --dsh-session-list-scrollbar-width:8px;
+  --dsh-session-list-scrollbar-offset:2px;
+  flex:1;min-height:0;display:flex;flex-direction:column;
+  padding-right:var(--dsh-session-list-edge-inset);
+}
+/* ---- 区头：36px，搜索槽在右 ---- */
+.section-header{
+  height:36px;flex:none;display:flex;align-items:center;gap:4px;
+  padding-left:4px;margin-top:2px;margin-right:-4px;margin-bottom:4px;
+  color:var(--dsw-alias-label-tertiary);border-radius:12px;overflow:hidden;
+}
+.section-label{
+  white-space:nowrap;overflow:hidden;flex:none;min-width:0;max-width:45%;
+  line-height:20px;font-size:12px;
+  transition:max-width var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             margin-right var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             opacity .12s var(--ds-ease-in-out),
+             transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             visibility 0s linear;
+}
+.section-label.hidden{opacity:0;visibility:hidden;max-width:0;margin-right:-4px;transform:translateX(-4px);transition-delay:0s,0s,0s,0s,.18s}
+.search-slot{
+  flex:1;min-width:0;max-width:28px;display:flex;align-items:center;
+  margin-left:auto;padding-left:0;
+  transition:max-width var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+.search-slot.expanded{max-width:100%}
+.header-actions{
+  flex:none;display:flex;align-items:center;gap:4px;max-width:60px;
+  opacity:1;visibility:visible;
+  transition:max-width var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             opacity .12s var(--ds-ease-in-out),
+             transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             visibility 0s linear;
+}
+.header-actions.hidden{opacity:0;visibility:hidden;pointer-events:none;max-width:0;transform:translateX(4px);transition-delay:0s,0s,0s,.18s}
+
+/* 圆形图标按钮 28px */
+.icon-btn{
+  width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  border:none;border-radius:50%;padding:0;cursor:pointer;
+  background:transparent;color:var(--dsw-alias-label-secondary);
+}
+.icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.icon-btn.on{background:var(--dsw-alias-interactive-bg-hover)}
+
+/* 折叠搜索 */
+.search{
+  width:100%;height:28px;display:flex;align-items:center;gap:0;
+  border:none;border-radius:50%;background:transparent;color:var(--dsw-alias-label-secondary);
+  cursor:text;overflow:hidden;margin:0;padding:0;
+  transition:width var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             padding var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             border-color var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+             background-color var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+.search.expanded{
+  width:calc(100% + 4px);height:30px;border:.5px solid var(--dsw-alias-border-l4);
+  border-radius:10px;margin-inline:-2px;padding:0 4px 0 0;color:var(--dsw-alias-label-caption);
+}
+.search-btn{
+  width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  border:none;border-radius:50%;padding:0;cursor:pointer;background:transparent;color:inherit;
+}
+.search.expanded .search-btn{height:30px}
+.search-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.search.expanded .search-btn:hover{background:transparent}
+.search-input{
+  flex:1;min-width:0;width:0;opacity:0;pointer-events:none;
+  border:none;outline:none;background:transparent;
+  color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;
+  transition:opacity .12s var(--ds-ease-in-out);
+}
+.search.expanded .search-input{opacity:1;pointer-events:auto;margin-left:-2px}
+.search-input::placeholder{color:var(--dsw-alias-label-tertiary)}
+.clear-btn{
+  width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  border:none;border-radius:50%;padding:0;cursor:pointer;
+  background:transparent;color:var(--dsw-alias-label-secondary);
+}
+.clear-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}
+
+/* ---- 列表区 ---- */
+.list-area{flex:1;min-height:0;margin-left:-4px;overflow-y:auto;overflow-x:hidden;padding-left:4px;padding-bottom:8px}
+.list-area::-webkit-scrollbar{width:8px}
+.list-area::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:4px}
+.list-area::-webkit-scrollbar-track{background:transparent}
+.group{margin-bottom:2px}
+.tree{display:flex;flex-direction:column}
+
+/* ---- 行：工作区 34px / 会话 32px，圆角 8px，内边距 0 8px，gap 6px ---- */
+.project-row,.session-row{
+  display:flex;align-items:center;gap:6px;padding:0 8px;
+  cursor:pointer;user-select:none;border-radius:8px;
+  color:var(--dsw-alias-label-primary);
+}
+.project-row{height:34px}
+.session-row{height:32px;gap:0;animation:row-in .15s var(--ds-ease-in-out)}
+@keyframes row-in{from{opacity:0}}
+.project-row:hover,.session-row:hover,.session-row.selected{background:var(--dsw-alias-interactive-bg-hover)}
+.project-row.menu-open,.session-row.menu-open{background:var(--dsw-alias-interactive-bg-hover)}
+.slot{
+  width:16px;height:20px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  color:var(--dsw-alias-label-tertiary);
+}
+.folder-active{color:var(--dsw-alias-state-business-primary)}
+/* 悬停时文件夹图标换成箭头（CSS-only 交换，照抄 DSH） */
+.project-row .chevron{display:none}
+.project-row:hover .chevron{display:inline-flex}
+.project-row:hover .folder{display:none}
+.arrow{transition:transform .15s var(--ds-ease-in-out)}
+.arrow-open{transform:rotate(90deg)}
+.project-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.title{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:14px;line-height:20px;
+}
+.session-row .title{flex:1;margin:0 6px 0 4px}
+.session-row.flat .title{margin-left:0}
+.rename-input{
+  min-width:0;flex:1;border:.5px solid var(--dsw-alias-border-l4);
+  background:var(--dsw-alias-button-elevated-fill);color:inherit;
+  border-radius:4px;outline:none;padding:0 2px;font-size:14px;line-height:20px;
+}
+.meta{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:20px;
+}
+.time{flex:none;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:20px}
+.dot{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px}
+/* 未持久化的会话草稿标记（"新建会话"只是界面状态，见 newSessionIn） */
+.draft-ind{
+  flex:none;margin-left:6px;padding:0 5px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);
+  color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;white-space:nowrap;
+}
+.dot i{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-warn-primary);display:block}
+.row-actions{flex:none;display:none;align-items:center;gap:12px}
+.project-row:hover .row-actions,
+.session-row:hover .row-actions,
+.project-row.menu-open .row-actions,
+.session-row.menu-open .row-actions{display:inline-flex}
+.session-row:hover .time,.session-row.menu-open .time{display:none}
+.act{
+  width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;
+  border:none;background:transparent;border-radius:50%;padding:0;cursor:pointer;
+  color:var(--dsw-alias-label-secondary);
+}
+.act:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+
+/* 拖拽插入线（照抄 DSH 的渐变箭头 + 线） */
+.session-row.drop-before,.session-row.drop-after{position:relative}
+.session-row.drop-before::before,.session-row.drop-after::after{
+  content:"";position:absolute;left:0;right:4px;height:12px;z-index:1;pointer-events:none;
+  background:
+    linear-gradient(55deg,transparent calc(50% - 1px),var(--dsw-alias-state-business-primary) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)) 0 0/5px 7px no-repeat,
+    linear-gradient(125deg,transparent calc(50% - 1px),var(--dsw-alias-state-business-primary) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)) 0 5px/5px 7px no-repeat,
+    linear-gradient(var(--dsw-alias-state-business-primary) 0 0) 4px 5px/calc(100% - 4px) 2px no-repeat;
+}
+.session-row.drop-before::before{top:-7px}
+.session-row.drop-after::after{bottom:-7px}
+
+/* 展开其余 */
+.more-row{
+  height:28px;display:flex;align-items:center;padding:0 8px 0 28px;
+  font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary);
+  cursor:pointer;border-radius:8px;
+}
+.more-row:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}
+
+/* 搜索结果行 */
+.search-result{
+  display:flex;flex-direction:column;align-items:stretch;
+  width:100%;min-height:48px;padding:4px 8px;border-radius:8px;
+  background:transparent;border:none;cursor:pointer;text-align:left;
+  color:var(--dsw-alias-label-primary);
+}
+.search-result:hover,.search-result.selected{background:var(--dsw-alias-interactive-bg-hover)}
+.sr-head{display:flex;align-items:center;min-width:0}
+.sr-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;margin-left:4px}
+.sr-meta{display:flex;align-items:center;gap:6px;min-width:0;margin-left:20px}
+.sr-ws{flex:none;max-width:40%;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-snippet{flex:1;min-width:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 空态 */
+.empty{
+  padding:24px 8px;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:20px;
+}
+
+/* 底部状态条（把内部状态显示出来） */
+.status-bar{
+  flex:none;height:26px;display:flex;align-items:center;gap:8px;
+  padding:0 4px;border-top:.5px solid rgba(255,255,255,.06);
+  color:var(--dsw-alias-label-caption);font-size:11px;line-height:20px;white-space:nowrap;overflow:hidden;
+}
+.status-bar b{font-weight:500;color:var(--dsw-alias-label-tertiary)}
+
+/* ===== 扩展技能：/ 建议菜单 + skill 调用工具行（复刻 ui-skill） ===== */
+.main-body{flex-direction:column;align-items:stretch;justify-content:flex-start;color:inherit;font-size:inherit;overflow-y:auto;padding-bottom:12px}
+.composer{position:relative;margin:16px 20px 0}
+.composer-box{
+  border:.5px solid var(--dsw-alias-border-l4);border-radius:12px;padding:10px 12px;
+  background:var(--dsw-alias-bg-layer-1);display:flex;flex-direction:column;gap:6px;
+}
+.composer-input{
+  width:100%;border:none;outline:none;background:transparent;resize:none;height:22px;
+  color:var(--dsw-alias-label-primary);font:400 14px/22px inherit;font-family:inherit;
+}
+.composer-hint{font-size:11px;line-height:16px;color:var(--dsw-alias-label-caption)}
+.slash-menu{
+  position:absolute;left:0;right:0;bottom:calc(100% + 6px);z-index:70;max-height:280px;overflow-y:auto;
+  padding:6px;border-radius:10px;background:var(--dsw-alias-bg-layer-3);
+  box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.08);
+  display:none;flex-direction:column;gap:2px;
+}
+.slash-menu.show{display:flex}
+.slash-group{padding:4px 8px;font-size:11px;color:var(--dsw-alias-label-caption)}
+.slash-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
+.slash-item:hover,.slash-item.active{background:var(--dsw-alias-interactive-bg-hover)}
+.slash-name{flex:none;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}
+.slash-desc{flex:1;min-width:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slash-badge{flex:none;font-size:11px;line-height:16px;padding:0 6px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-tertiary)}
+.slash-empty{padding:8px;font-size:12px;color:var(--dsw-alias-label-tertiary)}
+
+/* ===== skill 调用工具行（逐条照抄 ui-skill 的 SkillRow.module.css） ===== */
+.skill-area{display:flex;flex-direction:column;gap:6px;padding-top:4px}
+.skill-card{display:flex;flex-direction:column;margin:0 20px}
+.skill-row{position:relative;display:flex;align-items:center;height:24px;min-width:0;overflow:hidden}
+.skill-row[data-expandable]{cursor:pointer}
+.skill-card[data-state=running] .skill-row::after{
+  content:"";position:absolute;inset:0 auto 0 0;width:300px;pointer-events:none;
+  background:linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent) 55%, transparent 100%);
+  animation:2.6s ease-out infinite skill-sweep;
+}
+@keyframes skill-sweep{0%{left:-300px}90%,to{left:100%}}
+.skill-leading{
+  position:relative;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;margin-right:6px;color:var(--dsw-alias-label-tertiary);
+}
+.skill-chev{color:var(--dsw-alias-label-secondary)}
+.skill-icon-idle{display:inline-flex;opacity:1;transition:opacity .1s}
+.skill-chev-hover{position:absolute;inset:0;margin:auto;opacity:0;transition:opacity .1s}
+.skill-row:hover .skill-icon-idle{opacity:0}
+.skill-row:hover .skill-chev-hover{opacity:1}
+.skill-title{flex:none;font-size:14px;line-height:24px;color:var(--dsw-alias-label-secondary)}
+.skill-sep{flex:none;width:2px;height:2px;margin:0 8px;border-radius:1px;background:var(--dsw-alias-label-caption)}
+.skill-summary{flex:auto;min-width:0;font-size:14px;line-height:24px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.skill-summary.err{color:var(--dsw-alias-state-error-primary)}
+.skill-dot{flex:none;width:8px;height:8px;border-radius:50%}
+.skill-dot.error{background:var(--dsw-alias-state-error-primary)}
+.skill-dot.warning{background:var(--dsw-alias-state-warn-primary)}
+.skill-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skill-body{display:flex;flex-direction:column}
+.skill-box{
+  display:flex;flex-direction:column;max-height:260px;margin:4px 0 4px 4px;overflow:hidden;
+  border:.5px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-markdown-code-block);
+}
+.skill-box-head{
+  flex:none;padding:8px 12px;font-size:11px;font-weight:500;line-height:16px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--dsw-alias-label-caption);background:var(--dsw-alias-markdown-code-block-banner);
+  border-bottom:.5px solid var(--dsw-alias-border-l2);
+}
+.skill-pre{
+  margin:0;padding:10px 12px 12px;min-height:0;overflow:auto;
+  font:var(--dsw-font-markdown-code-block-small);
+  color:var(--dsw-alias-label-secondary);white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.skill-pre[data-error]{color:var(--dsw-alias-state-error-primary)}
+.skill-inspect{
+  align-self:flex-start;display:inline-flex;align-items:center;gap:4px;margin:4px 0 2px 4px;padding:2px 8px;
+  border:.5px solid var(--dsw-alias-border-l4);border-radius:999px;background:var(--dsw-alias-bg-base);
+  color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:11px;line-height:16px;
+  opacity:0;transition:opacity .1s;
+}
+.skill-card:hover .skill-inspect,.skill-inspect:focus-visible{opacity:1}
+.skill-inspect:hover{background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-primary)}
+.tool-foot{display:flex;justify-content:flex-end;margin-top:8px}
+.inspect-btn{height:24px;padding:0 10px;border:none;border-radius:6px;cursor:pointer;background:var(--dsw-alias-button-floating-fill);color:var(--dsw-alias-label-secondary);font-size:12px}
+.inspect-btn:hover{background:var(--dsw-alias-button-floating-hover);color:var(--dsw-alias-label-primary)}
+
+/* ===== 悬浮卡片 ===== */
+.hover-card{
+  position:fixed;z-index:60;max-width:320px;padding:8px 12px;border-radius:8px;
+  /* 2026-09-24 用户反馈「鼠标点到会话上会闪」：卡片绝不能吃鼠标事件。
+     浮框只有 260~362px 宽，卡片按旧算法被夹到行左侧、正好压在鼠标所在的那一行上，
+     于是 进卡片→行 mouseleave→卡片消失→又进行 无限循环，看上去就是闪。 */
+  pointer-events:none;
+  background:var(--dsw-alias-tooltip-bg);
+  box-shadow:0 8px 24px rgba(0,0,0,.45);
+  display:none;flex-direction:column;gap:8px;
+}
+.hover-card.show{display:flex}
+.hover-title{color:#fff;font-size:14px;line-height:20px;overflow-wrap:break-word}
+.hover-path{color:#cfd3d6;font-size:12px;line-height:16px;word-break:break-all}
+.hover-time{color:var(--dsw-alias-label-caption);font-size:12px;line-height:16px}
+
+/* ===== 右键菜单 ===== */
+.menu{
+  position:fixed;z-index:80;min-width:168px;padding:4px;border-radius:8px;
+  background:var(--dsw-alias-bg-layer-3);
+  box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.08);
+  display:none;flex-direction:column;
+}
+.menu.show{display:flex}
+.menu-item{
+  display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:6px;
+  font-size:13px;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;background:transparent;text-align:left;
+}
+.menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.menu-item.danger{color:var(--dsw-static-red-600)}
+.menu-sep{height:1px;margin:4px 4px;background:var(--dsw-alias-border-l4,rgba(255,255,255,.08))}
+.menu-item:disabled{opacity:.4;cursor:default}
+.menu-item:disabled:hover{background:transparent}
+.menu-item svg{flex:none}
+.menu-item .menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-item:focus-visible{outline:2px solid var(--dsw-alias-border-l4,rgba(255,255,255,.35));outline-offset:-2px}
+
+/* ===== 视图选项弹层 ===== */
+.popover{
+  position:fixed;z-index:80;min-width:180px;padding:6px;border-radius:10px;
+  background:var(--dsw-alias-bg-layer-3);
+  box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.08);
+  display:none;flex-direction:column;
+}
+.popover.show{display:flex}
+.pop-title{padding:4px 8px;font-size:11px;color:var(--dsw-alias-label-caption)}
+.pop-item{
+  display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:6px;
+  font-size:13px;color:var(--dsw-alias-label-primary);cursor:pointer;
+}
+.pop-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.pop-check{width:16px;flex:none;color:var(--dsw-alias-state-business-primary);font-size:12px}
+
+/* ===== 对话框 ===== */
+.scrim{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center}
+.scrim.show{display:flex}
+.dialog{
+  width:380px;max-width:calc(100vw - 32px);border-radius:12px;padding:16px;
+  background:var(--dsw-alias-bg-layer-2);
+  box-shadow:0 16px 48px rgba(0,0,0,.6),0 0 0 .5px rgba(255,255,255,.08);
+}
+.dialog h3{margin:0 0 8px;font-size:15px;font-weight:500;line-height:22px}
+.dialog p{margin:0 0 12px;font-size:13px;line-height:20px;color:var(--dsw-alias-label-secondary)}
+.dialog input{
+  width:100%;height:32px;padding:0 8px;border-radius:6px;
+  border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-button-elevated-fill);
+  color:var(--dsw-alias-label-primary);font-size:14px;outline:none;
+}
+.dialog-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.btn{
+  height:32px;padding:0 14px;border-radius:8px;font-size:13px;cursor:pointer;border:none;
+  background:var(--dsw-alias-button-floating-fill);color:var(--dsw-alias-label-primary);
+}
+.btn:hover{background:var(--dsw-alias-button-floating-hover)}
+.btn.primary{background:var(--dsw-alias-state-business-primary);color:#fff}
+.btn.primary:hover{background:var(--dsw-static-deepseek-400)}
+.btn.danger{background:var(--dsw-static-red-600);color:#fff}
+
+/* 提示条 */
+.toast{
+  position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100;
+  padding:8px 14px;border-radius:8px;font-size:13px;
+  background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);
+  box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;transition:opacity .18s var(--ds-ease-in-out);pointer-events:none;
+}
+.toast.show{opacity:1}
+
+/* ===== Harness desktop replica ===== */
+.app{display:none !important}
+.harness-app{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:#141416;color:#f7f7f8;font-size:13px;line-height:1.4}
+.h-topbar{height:52px;flex:none;display:flex;align-items:center;padding:0 14px;border-bottom:1px solid #303033;background:#1b1b1d;color:#e7e7e9;user-select:none}
+.h-top-left,.h-top-right{display:flex;align-items:center;gap:16px}.h-top-left{flex:1}.h-top-right{gap:18px;color:#d7d7da}
+.h-window-menu{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;color:#f0f0f0}
+.h-menu{font-size:13px;line-height:20px;cursor:pointer}.h-menu:hover{color:#fff}.h-update{padding:1px 7px;border-radius:8px;color:#5ce18c;background:#163b27;font-size:11px}
+.h-window-control{font-size:17px;line-height:1;opacity:.9}.h-window-control.close{font-size:20px}.h-window-control:hover{opacity:1}
+.h-workspace{display:flex;min-height:0;flex:1}
+.h-sidebar{width:280px;flex:none;display:flex;flex-direction:column;padding:22px 12px 14px;background:#1b1b1d;border-right:1px solid #353539}
+.h-brand{height:42px;display:flex;align-items:center;gap:9px;padding:0 34px;margin-bottom:10px;font-size:18px;font-weight:600;letter-spacing:-.02em}.h-brand-mark{width:24px;height:24px;display:grid;place-items:center;color:#fff}.h-brand-mark svg{width:24px;height:24px}.h-brand-badge{font-size:10px;line-height:16px;padding:0 4px;border:1px solid #d8d8da;color:#e6e6e8;letter-spacing:.04em;font-weight:700}
+.h-new-session{height:38px;margin:0 3px 10px;border:1px solid #6d6e73;border-radius:9px;background:#4a4b50;color:#fff;font-size:14px;cursor:pointer}.h-new-session:hover{background:#56575c}
+.h-nav{display:flex;flex-direction:column;gap:3px}.h-nav button{height:36px;display:flex;align-items:center;gap:9px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:#f1f1f2;text-align:left;font:inherit;cursor:pointer}.h-nav button:hover{background:#303033}.h-nav button.active{background:#414144}.h-nav-icon{width:18px;display:inline-grid;place-items:center;color:#f0f0f2}.h-nav-label{font-size:14px}
+.h-sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:4px}.h-sidebar-bottom button{height:34px;border:0;background:transparent;color:#f1f1f2;text-align:left;padding:0 8px;border-radius:7px;font:inherit;cursor:pointer}.h-sidebar-bottom button:hover{background:#2d2d30}
+.h-stage{min-width:0;flex:1;overflow:auto;background:#141416}.h-page{display:none;width:min(650px,calc(100% - 64px));margin:32px auto 56px}.h-page.active{display:block}
+.h-tabs{display:flex;gap:26px;height:32px;border-bottom:1px solid #303033;margin-bottom:34px}.h-tab{height:32px;padding:0;border:0;border-bottom:2px solid transparent;background:transparent;color:#a9abb0;font:inherit;cursor:pointer}.h-tab:hover{color:#fff}.h-tab.active{color:#fff;border-color:#f0f0f2}
+.h-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.h-section-title{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600}.h-section-title .h-cap{color:#cdd0d4}.h-section-actions{display:flex;align-items:center;gap:22px}.h-link{border:0;background:transparent;color:#f1f1f2;font:inherit;cursor:pointer;padding:0}.h-link:hover{color:#76a8ff}.h-primary{height:30px;padding:0 12px;border:0;border-radius:16px;background:#f0f0f2;color:#161619;font:inherit;font-weight:500;cursor:pointer}.h-primary:hover{background:#fff}.h-desc{margin:0 0 23px;color:#bec0c5;font-size:13px;line-height:20px}.h-toolbar{height:32px;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.h-count{font-size:13px;color:#f0f0f2}.h-count span{color:#a4a6ac}.h-search-wrap{display:flex;align-items:center;gap:10px}.h-search{width:200px;height:30px;display:flex;align-items:center;gap:7px;padding:0 9px;border:1px solid #45464a;border-radius:7px;background:#242426;color:#96989e}.h-search:focus-within{border-color:#6f94cb}.h-search input{width:100%;border:0;outline:0;background:transparent;color:#f4f4f5;font:inherit}.h-search input::placeholder{color:#777980}.h-refresh{width:23px;height:27px;padding:0;border:0;background:transparent;color:#a5a7ac;cursor:pointer;font-size:16px}.h-refresh:hover{color:#fff}
+.h-skill-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.h-skill-card{min-height:128px;display:flex;flex-direction:column;padding:12px 14px 11px;border:1px solid #55565a;border-radius:8px;background:#37373a}.h-skill-card:hover{border-color:#74767c}.h-skill-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.h-skill-name{font:600 13px/18px "SFMono-Regular",Consolas,monospace;color:#fff}.h-skill-badge{padding:2px 6px;border-radius:3px;background:#244575;color:#84b4ff;font-size:11px}.h-skill-badge.fallback{background:#4a3a16;color:#e8c37a;border:1px solid #7a5f22}.h-skill-desc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-top:8px;color:#e0e1e3;font-size:12px;line-height:18px}.h-skill-foot{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:8px}.h-toggle{width:30px;height:18px;padding:2px;border:0;border-radius:11px;background:#6a6b70;cursor:pointer}.h-toggle i{display:block;width:14px;height:14px;border-radius:50%;background:#f7f7f8;transition:transform .15s}.h-toggle.on{background:#6d9be8}.h-toggle.on i{transform:translateX(12px)}.h-open{border:0;background:transparent;color:#f1f1f2;font:inherit;cursor:pointer}.h-open:hover{color:#7faeff}
+/* 2026-09-30：技能开关改成**只读的可用状态指示**。原来的 .h-toggle 是可点的开关，
+   但后端没有任何"启用/停用技能"的写入端点（skills/registry.js 也不带 enabled 字段），
+   点一下只改内存 + toast「已启用/已停用」，刷新还原——典型假动作。
+   现在它不再是开关：cursor:default 且不可交互，状态由 GET /workspace/skills 的 enabled 决定。 */
+.h-toggle.static-indicator{cursor:default;pointer-events:none;opacity:.55}
+.h-skill-foot .h-toggle-note{color:#9a9ca2;font-size:11px}
+.h-schedule-title{margin:0 0 3px;font-size:24px;line-height:30px;letter-spacing:-.02em}.h-schedule-intro{margin:0 0 17px;color:#b5b7bc;font-size:13px}.h-schedule-actions{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}.h-schedule-search{width:190px;height:33px;display:flex;align-items:center;gap:7px;padding:0 9px;border:1px solid #4b4c51;border-radius:7px;background:#242426;color:#96989e}.h-schedule-search input{width:100%;border:0;outline:0;background:transparent;color:#f2f2f3;font:inherit}.h-action-group{display:flex;gap:9px}.h-outline{height:36px;padding:0 14px;border:1px solid #515258;border-radius:14px;background:transparent;color:#f2f2f3;font:inherit;font-weight:600;cursor:pointer}.h-outline:hover{background:#252528}.h-outline .plus{font-size:17px;margin-right:4px}.h-schedule-tabs{display:flex;gap:22px;height:31px;border-bottom:1px solid #303033;margin-bottom:57px}.h-schedule-tab{height:31px;padding:0;border:0;border-bottom:2px solid transparent;background:transparent;color:#c7c8cc;font:inherit;cursor:pointer}.h-schedule-tab.active{border-color:#eee;color:#fff;font-weight:600}.h-empty{text-align:center;color:#babcc1;font-size:13px}.h-recommend{margin-top:68px}.h-recommend-title{margin-bottom:8px;font-size:13px;font-weight:600}.h-reco-card{height:60px;display:flex;align-items:center;gap:12px;padding:8px 12px;border:1px solid #3d3e42;border-radius:8px;background:#151517;cursor:pointer}.h-reco-card+.h-reco-card{margin-top:9px}.h-reco-card:hover{background:#1f1f22;border-color:#5b5c62}.h-reco-icon{width:18px;height:18px;display:grid;place-items:center;color:#9079ff}.h-reco-card:nth-child(3) .h-reco-icon{color:#43caa8}.h-reco-main{min-width:0}.h-reco-name{color:#e9e9eb;font-size:13px}.h-reco-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#afb1b6;font-size:12px;margin-top:2px}.h-modal-backdrop{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}.h-modal-backdrop.show{display:flex}.h-modal{width:390px;padding:20px;border:1px solid #4b4c50;border-radius:10px;background:#2a2a2d;box-shadow:0 18px 50px #0008}.h-modal h3{margin:0 0 8px;font-size:16px}.h-modal p{margin:0 0 14px;color:#bfc1c5;font-size:13px}.h-modal input{width:100%;height:34px;padding:0 9px;border:1px solid #55565b;border-radius:6px;outline:0;background:#1b1b1d;color:#f7f7f8;font:inherit}.h-modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:17px}.h-modal-foot button{height:32px;padding:0 14px;border:0;border-radius:7px;background:#45464a;color:#f4f4f5;font:inherit;cursor:pointer}.h-modal-foot .ok{background:#f0f0f2;color:#151517}.h-toast{position:fixed;left:50%;bottom:24px;z-index:350;transform:translate(-50%,10px);padding:8px 14px;border-radius:7px;background:#38393d;color:#f8f8f9;opacity:0;pointer-events:none;transition:.18s}.h-toast.show{opacity:1;transform:translate(-50%,0)}
+@media (max-width:800px){.h-sidebar{width:220px}.h-brand{padding-left:12px}.h-page{width:calc(100% - 36px)}.h-skill-grid{grid-template-columns:1fr}.h-section-actions{gap:10px}.h-link{display:none}}
+/* 嵌入爱丽丝宿主时，演示页以左侧浮框呈现；窄屏自动恢复全宽。 */
+.harness-app{inset:16px auto 16px 16px;width:min(980px,calc(100vw - 360px));height:auto;border:1px solid #414247;border-radius:12px;box-shadow:0 18px 55px rgba(0,0,0,.48);overflow:hidden}
+.h-topbar{cursor:grab}.h-topbar:active{cursor:grabbing}
+@media (max-width:1100px){.harness-app{inset:10px; width:auto}}
+
+/* ===== 右侧对话区（占位，只为看清侧边栏布局比例） ===== */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base)}
+.main-head{height:48px;flex:none;display:flex;align-items:center;padding:0 20px;color:var(--dsw-alias-label-secondary);font-size:13px;border-bottom:.5px solid rgba(255,255,255,.06)}
+.main-body{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-dimmed);font-size:14px}
+/* ===== 左侧功能区栏：定时任务 / 扩展技能 / 工作区 同处一栏，内容内联，不弹浮框 ===== */
+.fn-sec{flex:none;display:flex;flex-direction:column;margin-bottom:4px;padding-bottom:4px;border-bottom:.5px solid rgba(255,255,255,.06)}
+.fn-sec:last-of-type{border-bottom:0;margin-bottom:0}
+.fn-sec-head{height:30px;flex:none;display:flex;align-items:center;gap:7px;padding-left:4px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:16px;letter-spacing:.02em;user-select:none}
+.fn-sec-head svg{flex:none;display:block}
+.fn-sec-body{display:flex;flex-direction:column;gap:1px;max-height:188px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin}
+.fn-sec-body::-webkit-scrollbar{width:6px}
+.fn-sec-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+.fn-sec-body::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22)}
+.fn-sec-body::-webkit-scrollbar-track{background:transparent}
+/* 小节标题行：左标题 + 右计数 */
+.fn-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 10px 4px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;letter-spacing:.04em}
+.fn-count{flex:none;min-width:16px;padding:0 5px;border-radius:8px;background:rgba(255,255,255,.06);color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;text-align:center;font-variant-numeric:tabular-nums}
+.fn-row{box-sizing:border-box;width:100%;min-height:50px;display:flex;flex-direction:column;flex-shrink:0;gap:2px;padding:7px 10px;border-radius:8px;color:var(--dsw-alias-label-primary);cursor:default;transition:background .12s var(--ds-ease-in-out)}
+.fn-row[data-fn-skill]{cursor:pointer}
+.fn-row[data-fn-port]{cursor:pointer}
+.fn-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.fn-row:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:-1px}
+.fn-row.overdue{background:var(--dsw-alias-state-warn-tertiary)}
+.fn-row.fn-flash{background:rgba(103,158,254,.18)}
+.fn-status{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
+.fn-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-business-primary)}
+.fn-dot.user-only{background:var(--dsw-alias-label-dimmed)}
+.fn-row.overdue .fn-status{color:var(--dsw-alias-state-warn-label)}
+.fn-row.overdue .fn-dot{background:var(--dsw-alias-state-warn-primary)}
+.fn-prompt{font-size:13px;line-height:18px;white-space:normal;overflow-wrap:anywhere}
+.fn-meta{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-width:0;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
+.fn-meta .rel{font-variant-numeric:tabular-nums}
+.fn-meta .od{color:var(--dsw-alias-state-warn-label)}
+.fn-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.fn-fill{margin-left:auto;flex:none;opacity:0;color:var(--dsw-alias-state-business-primary);transition:opacity .12s var(--ds-ease-in-out)}
+.fn-row:hover .fn-fill,.fn-row:focus-visible .fn-fill{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 左侧一栏：定时任务 / 扩展技能 / 工作区 自上而下同处一栏，内容内联，不弹浮框 -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-name">DeepSeek Harness</div>
+    </div>
+
+    <!-- 功能区 1：定时任务 -->
+    <section class="fn-sec" aria-label="定时任务">
+      <div class="fn-sec-head"><span id="fnSchedIcon"></span><span>定时任务</span></div>
+      <div class="fn-sec-body" id="fnSchedBody"></div>
+    </section>
+
+    <!-- 功能区 2：扩展技能 -->
+    <section class="fn-sec" aria-label="扩展技能">
+      <div class="fn-sec-head"><span id="fnSkillIcon"></span><span>扩展技能</span></div>
+      <div class="fn-sec-body" id="fnSkillBody"></div>
+    </section>
+
+    <!-- 功能区 3：移植能力（2026-10-01）
+         从 DSH 移植过来的四项能力的**入口**：远程机器 / 已归档会话 / 桌宠。
+         与上面两区同处一栏、同样内联渲染，不弹浮框。 -->
+    <section class="fn-sec" aria-label="移植能力">
+      <div class="fn-sec-head"><span id="fnPortIcon"></span><span>移植能力</span></div>
+      <div class="fn-sec-body" id="fnPortBody"></div>
+    </section>
+
+    <div class="ws-root">
+      <!-- 区头 -->
+      <div class="section-header">
+        <div class="section-label" id="sectionLabel">工作区</div>
+        <div class="search-slot" id="searchSlot">
+          <div class="search" id="search">
+            <button class="search-btn" id="searchBtn" title="搜索会话" aria-label="搜索会话">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </button>
+            <input class="search-input" id="searchInput" placeholder="搜索会话" aria-label="搜索会话">
+            <button class="clear-btn" id="clearBtn" title="清空" aria-label="清空" style="display:none">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="header-actions" id="headerActions">
+          <button class="icon-btn" id="openSessDirBtn" title="打开会话存储目录" aria-label="打开会话存储目录">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h2.9l1.4 1.6h6c.6 0 1.1.5 1.1 1.1v5.9c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1V4.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" id="newWsBtn" title="新增工作区：本产品无此实体（点按查看说明）" aria-label="新增工作区：本产品无此实体（点按查看说明）">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+          <button class="icon-btn" id="viewBtn" title="视图选项" aria-label="视图选项">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M3 8h10M3 11.5h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- 列表 -->
+      <div class="list-area" id="listArea"></div>
+
+      <!-- 状态条：把内部状态摊开显示 -->
+      <div class="status-bar" id="statusBar"></div>
+    </div>
+  </aside>
+
+  <!-- 右侧对话区：承载 / 技能建议菜单与 skill 调用工具行 -->
+  <main class="main">
+    <div class="main-head" id="mainHead">未选择会话</div>
+    <div class="main-body" id="mainBody">
+      <div class="composer">
+        <div class="slash-menu" id="slashMenu" role="listbox" aria-label="技能建议"></div>
+        <div class="composer-box">
+          <textarea class="composer-input" id="composerInput" rows="1" placeholder="输入消息，输入 / 调用技能" aria-label="输入消息"></textarea>
+          <div class="composer-hint">输入 / 打开技能建议；选中后发出的消息携带字面文本 /name，宿主以同样方式加载</div>
+        </div>
+      </div>
+      <div class="skill-area" id="skillArea"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Harness desktop UI layer matching the supplied reference screens -->
+<div class="harness-app" id="harnessApp">
+  <header class="h-topbar">
+    <div class="h-top-left">
+      <span class="h-window-menu" aria-hidden="true">▣</span>
+      <span class="h-menu">文件</span><span class="h-menu">配置</span><span class="h-menu">帮助</span>
+      <span class="h-update">更新可用</span>
+    </div>
+    <div class="h-top-right" aria-hidden="true"><span class="h-window-control">−</span><span class="h-window-control">□</span><span class="h-window-control close">×</span></div>
+  </header>
+  <div class="h-workspace">
+    <aside class="h-sidebar" aria-label="主导航">
+      <div class="h-brand"><span class="h-brand-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M4 14.2c1.4-4.5 5.3-7.5 9.7-7.5 2.2 0 4.2.7 5.8 2-1.1.1-2 .7-2.6 1.7 1.1.5 1.9 1.5 2.1 2.7-1.2-.3-2.5-.3-3.6.1-1.5 2.7-4.1 4.6-7.4 4.6-1.5 0-2.9-.4-4.1-1.1 1.7.1 3.1-.5 4.1-1.6-1.4 0-2.7-.9-3.1-2.2 1 .2 2 .1 2.8-.3-1.4-.3-2.3-1.6-2-2.9.8.5 1.7.8 2.7.8-.8-.8-1.2-1.9-.9-3 .9 1.1 2.2 1.9 3.7 2.1" fill="currentColor"/></svg></span><span>deepseek</span><span class="h-brand-badge">HARNESS</span></div>
+      <button class="h-new-session" id="hNewSession">⊕&nbsp; 新会话</button>
+      <nav class="h-nav">
+        <button type="button" data-page="schedule"><span class="h-nav-icon">▣</span><span class="h-nav-label">定时任务</span></button>
+        <button type="button" data-page="skills" class="active"><span class="h-nav-icon">✣</span><span class="h-nav-label">扩展技能</span></button>
+        <!-- 2026-09-24 用户要求：MCP 功能区已收进扩展技能页顶部的「MCP」标签，导航里不再单列一项 -->
+      </nav>
+      <div class="h-sidebar-bottom"><button type="button" id="hSettings">⚙&nbsp; 设置</button><button type="button" id="hProfile">♟</button></div>
+    </aside>
+    <main class="h-stage">
+      <section class="h-page active" id="hPageSkills">
+        <div class="h-tabs"><button class="h-tab active" type="button">技能</button><button class="h-tab" type="button" id="hMcpTab">MCP</button></div>
+        <div class="h-section-head"><div class="h-section-title"><span class="h-cap">♧</span><span>技能管理</span></div><div class="h-section-actions"><button class="h-link" type="button" id="hOpenSkills">打开技能目录</button><button class="h-link" type="button" id="hImportSkill" title="当前版本不支持从仓库导入；点按打开技能目录">导入仓库（暂不支持）</button><button class="h-primary" type="button" id="hNewSkill" title="在技能目录里新建文件夹 + SKILL.md">新建技能（本地目录）</button></div></div>
+        <p class="h-desc">查看与编辑 dsh 发现的技能；用户级与仓库技能可就地管理。卡片开关控制技能是否加载。</p>
+        <div class="h-toolbar"><div class="h-count">技能 <span id="hSkillCount">0/0</span></div><div class="h-search-wrap"><label class="h-search"><span>⌕</span><input id="hSkillSearch" placeholder="搜索技能名称或描述" aria-label="搜索技能名称或描述"></label><button class="h-refresh" type="button" id="hRefreshSkills" title="刷新">↻</button></div></div>
+        <div class="h-skill-grid" id="hSkillGrid"></div>
+      </section>
+      <section class="h-page" id="hPageMcp">
+        <h1 class="h-schedule-title">MCP 服务器</h1>
+        <p class="h-schedule-intro">管理 Model Context Protocol 服务器。启用后，服务器提供的工具会进入当前会话的工具目录。</p>
+        <div class="h-schedule-actions">
+          <label class="h-schedule-search"><span>⌕</span><input id="hMcpSearch" placeholder="搜索服务器或工具..." aria-label="搜索 MCP 服务器或工具"></label>
+          <div class="h-action-group"><button class="h-outline" type="button" id="hMcpRefresh">↻&nbsp; 刷新</button><button class="h-primary" type="button" id="hMcpAdd"><span class="plus">＋</span>添加服务器</button></div>
+        </div>
+        <div class="h-mcp-summary"><span>已配置 <b id="hMcpCount">0</b> 个服务器</span><span>可用工具 <b id="hMcpTools">0</b> 个</span></div>
+        <div class="h-mcp-list" id="hMcpList"></div>
+      </section>
+      <section class="h-page" id="hPageSchedule">
+        <h1 class="h-schedule-title">定时任务</h1><p class="h-schedule-intro">按计划自动执行任务，也可随时手动触发。在任意对话中描述你想定期做的事，即可快速创建。</p>
+        <div class="h-schedule-actions"><label class="h-schedule-search"><span>⌕</span><input id="hScheduleSearch" placeholder="搜索定时任务..." aria-label="搜索定时任务"></label><div class="h-action-group"><button class="h-outline" type="button" id="hChatCreate">◉&nbsp; 通过 Chat 创建</button><button class="h-primary" type="button" id="hManualCreate"><span class="plus">＋</span>手动创建</button></div></div>
+        <div class="h-schedule-tabs"><button class="h-schedule-tab active" type="button" data-schedule-tab="active">定时任务</button><button class="h-schedule-tab" type="button" data-schedule-tab="history">执行记录</button></div>
+        <div class="h-schedule-panel" id="hSchedulePanel"><div class="h-empty" id="hScheduleEmpty">还没有定时任务，点击「手动创建」创建一个。</div><div class="h-recommend"><div class="h-recommend-title">推荐</div><div class="h-reco-card" data-recommend="weekly"><span class="h-reco-icon">▣</span><div class="h-reco-main"><div class="h-reco-name">每周回顾 <span>星期五 16:00</span></div><div class="h-reco-desc">每周五将你最近的工作整理成详细的状态更新</div></div></div><div class="h-reco-card" data-recommend="morning"><span class="h-reco-icon">▣</span><div class="h-reco-main"><div class="h-reco-name">工作日早报 <span>工作日 08:00</span></div><div class="h-reco-desc">我要创建一个定时任务，每「工作日」执行【汇总昨夜仓库变更并给出今日关注点】。</div></div></div></div></div>
+      </section>
+    </main>
+  </div>
+  <div class="h-toast" id="hToast"></div>
+  <div class="h-modal-backdrop" id="hModalBackdrop"><div class="h-modal" role="dialog" aria-modal="true"><h3 id="hModalTitle">新建</h3><p id="hModalDesc">输入名称后继续。</p><input id="hModalInput" type="text" placeholder="名称"><div class="h-modal-foot"><button type="button" id="hModalCancel">取消</button><button type="button" class="ok" id="hModalOk">确定</button></div></div></div>
+</div>
+
+<!-- 悬浮卡片 -->
+<div class="hover-card" id="hoverCard">
+  <div class="hover-title" id="hcTitle"></div>
+  <div class="hover-path" id="hcPath"></div>
+  <div class="hover-time" id="hcTime"></div>
+</div>
+
+<!-- 右键菜单 -->
+<div class="menu" id="menu" role="menu" aria-label="工作区操作"></div>
+
+<!-- 视图选项 -->
+<div class="popover" id="viewPop">
+  <div class="pop-title">分组方式</div>
+  <div class="pop-item" data-group="grouped"><span class="pop-check" data-check="grouped">✓</span>按工作区</div>
+  <div class="pop-item" data-group="flat"><span class="pop-check" data-check="flat"></span>单列表</div>
+  <div class="menu-sep"></div>
+  <div class="pop-title">排序方式</div>
+  <div class="pop-item" data-order="recent"><span class="pop-check" data-check="recent">✓</span>最近更新</div>
+  <div class="pop-item" data-order="manual"><span class="pop-check" data-check="manual"></span>手动排序</div>
+</div>
+
+<!-- 对话框 -->
+<div class="scrim" id="scrim">
+  <div class="dialog">
+    <h3 id="dlgTitle">重命名</h3>
+    <p id="dlgDesc" style="display:none"></p>
+    <input id="dlgInput" type="text">
+    <div class="dialog-foot">
+      <button class="btn" id="dlgCancel">取消</button>
+      <button class="btn primary" id="dlgOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   工作区 / 会话 / 视图状态（数据来自 /workspace/conversations，无本地种子）
+   ============================================================ */
+let state = {
+  groupBy: 'grouped',      // grouped | flat
+  orderBy: 'recent',       // recent | manual
+  expanded: {},            // workspaceId -> bool
+  expandedAll: {},         // workspaceId -> bool（展开其余）
+  selected: null,          // 真实会话载入时由 loadRealSessions() 选中第一条
+  searchOpen: false,
+  query: '',
+  menuOpen: false,
+  collapsed: {}            // 折叠分组的拖拽边界
+};
+
+let workspaces = []; // 同上，真实工作区分组由 loadRealSessions() 聚合
+
+/* 会话：updatedAt 越小越近；pending 为待处理交互分类 */
+let sessions = []; // 真实会话由 loadRealSessions() 从 /workspace/conversations 填充；此处不再放演示种子
+
+const PENDING_LABEL = { approval:'等待审批', plan:'计划待审', question:'等待回答' };
+const PENDING_TIP   = { approval:'等待审批', plan:'计划待审', question:'等待回答' };
+
+/* ============================================================
+   工具
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const listArea = $('listArea');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function relTime(ts){
+  const d = Math.max(0, Date.now() - ts), m = Math.floor(d/60000);
+  if (m < 1) return '刚刚';
+  if (m < 60) return m + '分钟';
+  const h = Math.floor(m/60);
+  if (h < 24) return h + '小时';
+  const day = Math.floor(h/24);
+  if (day < 30) return day + '天';
+  const mo = Math.floor(day/30);
+  return mo + '个月';
+}
+function relTimeAgo(ts){ const s = relTime(ts); return s === '刚刚' ? '刚刚' : s + '前'; }
+function absTime(ts){
+  const d = new Date(ts), p = v => String(v).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function wsOf(id){ return workspaces.find(w => w.id === id); }
+function wsLabel(id){ const w = wsOf(id); return w ? w.label : '未分组'; }
+
+/* 排序后的会话列表 */
+function orderedSessions(){
+  const arr = sessions.slice();
+  if (state.orderBy === 'recent') arr.sort((a,b) => b.updatedAt - a.updatedAt);
+  return arr;
+}
+function sessionsOf(wsId){
+  return orderedSessions().filter(s => (s.ws || undefined) === (wsId || undefined));
+}
+
+/* ============================================================
+   图标
+   ============================================================ */
+const ICON = {
+  folderClose:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h2.9l1.4 1.6h6c.6 0 1.1.5 1.1 1.1v5.9c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1V4.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  folderOpen:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h2.9l1.4 1.6h5.4c.6 0 1.1.5 1.1 1.1v.8H3.9c-.6 0-1.1.4-1.2 1L1.8 12V4.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M2.7 12.4l1.5-4.4c.2-.5.6-.8 1.2-.8h8.3c.5 0 .9.5.7 1l-1.4 4.2c-.2.5-.6.8-1.2.8H3.4c-.5 0-.9-.4-.7-.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  triangle:'<svg class="arrow" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3.4l4 3.6-4 3.6V3.4z" fill="currentColor"/></svg>',
+  plus:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  ellipsis:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="3.6" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="12.4" cy="8" r="1.2" fill="currentColor"/></svg>',
+  alarm:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8.6" r="4.6" stroke="currentColor" stroke-width="1.2"/><path d="M8 6.4v2.4l1.6 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M2.4 3.6l1.8-1.4M13.6 3.6l-1.8-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  edit:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10.6 2.9l2.5 2.5-7.3 7.3-2.9.4.4-2.9 7.3-7.3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+  trash:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M4.6 4.6l.6 8h5.6l.6-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  fork:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="4.4" cy="4" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11.6" cy="4" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="12" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M4.4 5.8v1.4c0 1 .8 1.8 1.8 1.8h3.6c1 0 1.8-.8 1.8-1.8V5.8" stroke="currentColor" stroke-width="1.3"/><path d="M8 9v1.2" stroke="currentColor" stroke-width="1.3"/></svg>',
+  archive:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.4" y="3.2" width="11.2" height="2.6" rx=".8" stroke="currentColor" stroke-width="1.3"/><path d="M3.4 5.8v6c0 .6.5 1.1 1.1 1.1h6.9c.6 0 1.1-.5 1.1-1.1v-6" stroke="currentColor" stroke-width="1.3"/><path d="M6.6 8.4h2.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>'
+};
+
+/* ============================================================
+   渲染
+   ============================================================ */
+function render(){
+  if(state.query.trim()){ renderSearch(); renderStatus(); return; }
+  if(state.groupBy === 'flat') renderFlat(); else renderGrouped();
+  renderStatus();
+}
+
+/* —— 分组视图：默认 5 条非空白会话 + 「展开其余」 —— */
+function renderGrouped(){
+  const groups = workspaces.map(w => ({ id:w.id, label:w.label, cwd:w.cwd, createdAt:w.createdAt }));
+  groups.push({ id:undefined, label:'未分组', cwd:'', createdAt:undefined });
+
+  let html = '';
+  groups.forEach(g => {
+    const all = sessionsOf(g.id);
+    if(!all.length && g.id === undefined) return;      // 未分组为空则不渲染
+    const expanded = state.expanded[g.id === undefined ? '__ungrouped' : g.id] !== false;
+    const showAll = !!state.expandedAll[g.id === undefined ? '__ungrouped' : g.id];
+    const visible = showAll ? all : all.slice(0,5);
+    const hidden = all.length - visible.length;
+    const containsCurrent = all.some(s => s.id === state.selected);
+
+    html += '<div class="group">';
+    html += '<div class="tree">';
+    html += projectRowHTML(g, expanded, containsCurrent);
+    if(expanded){
+      visible.forEach(s => { html += sessionRowHTML(s, false); });
+      if(hidden > 0){
+        html += `<div class="more-row" data-more="${g.id === undefined ? '__ungrouped' : g.id}">展开其余 ${hidden} 条</div>`;
+      }
+      if(!all.length){
+        html += '<div class="empty">暂无会话</div>';
+      }
+    }
+    html += '</div></div>';
+  });
+  if(!html) html = '<div class="empty">暂无会话</div>';
+  listArea.innerHTML = html;
+  bindRows();
+}
+
+/* —— 单列表视图：跨工作区 —— */
+function renderFlat(){
+  const all = orderedSessions();
+  let html = '<div class="tree">';
+  if(!all.length) html += '<div class="empty">暂无会话</div>';
+  all.forEach(s => { html += sessionRowHTML(s, true); });
+  html += '</div>';
+  listArea.innerHTML = html;
+  bindRows();
+}
+
+/* —— 搜索结果：单一扁平列表，最多 20 条 —— */
+function renderSearch(){
+  const q = state.query.trim().toLowerCase();
+  const hits = orderedSessions().filter(s =>
+    s.title.toLowerCase().includes(q) || wsLabel(s.ws).toLowerCase().includes(q) || (s.snippet||'').toLowerCase().includes(q)
+  ).slice(0,20);
+  let html = '<div class="tree">';
+  if(!hits.length){
+    html += '<div class="empty">无匹配结果</div>';
+  } else {
+    hits.forEach(s => {
+      const hl = s.snippet.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')','ig'),'<mark style="background:rgba(103,158,254,.25);color:inherit">$1</mark>');
+      html += `<button class="search-result" data-open="${s.id}">
+        <span class="sr-head">
+          <span class="sr-title">${esc(s.title)}</span>
+        </span>
+        <span class="sr-meta">
+          <span class="sr-ws">${esc(wsLabel(s.ws))}</span>
+          <span class="sr-snippet">${hl}</span>
+        </span>
+      </button>`;
+    });
+  }
+  html += '</div>';
+  listArea.innerHTML = html;
+  listArea.querySelectorAll('[data-open]').forEach(el => {
+    el.addEventListener('click', () => { closeSearch(); openSession(el.dataset.open); });
+  });
+}
+
+/* 工作区行：文件夹图标 / 悬停换箭头 / 悬停出操作 */
+function projectRowHTML(g, expanded, containsCurrent){
+  const key = g.id === undefined ? '__ungrouped' : g.id;
+  const active = expanded && containsCurrent;
+  const isUngrouped = g.id === undefined;
+  return `<div class="project-row" data-ws="${key}" data-wsid="${g.id||''}" role="treeitem" aria-expanded="${expanded}" draggable="${isUngrouped?'false':'true'}">
+    <span class="slot folder${active?' folder-active':''}">${expanded ? ICON.folderOpen : ICON.folderClose}</span>
+    <span class="slot chevron">${ICON.triangle.replace('class="arrow"','class="arrow'+(expanded?' arrow-open':'')+'"')}</span>
+    <span class="project-text"><span class="title">${esc(g.label)}</span></span>
+    <span class="row-actions">
+      <button class="act" data-create="${key}" title="新建会话" aria-label="新建会话">${ICON.plus}</button>
+      <button class="act" data-wsmenu="${key}" title="更多" aria-label="更多">${ICON.ellipsis}</button>
+    </span>
+  </div>`;
+}
+
+/* 会话行：标题 + 待处理角标 + 更新时间；悬停时时间换成操作 */
+function sessionRowHTML(s, flat){
+  const pending = s.pending;
+  return `<div class="session-row${flat?' flat':''}${s.id===state.selected?' selected':''}" data-session="${s.id}" draggable="true" title="${pending?PENDING_TIP[pending]:''}">
+    <span class="title">${esc(s.title)}</span>
+    ${s._draft ? '<span class="draft-ind" title="未保存的会话草稿：未写入数据库，刷新后消失">未保存</span>' : ''}
+    ${pending ? `<span class="dot" title="${PENDING_TIP[pending]}" aria-label="${PENDING_TIP[pending]}"><i></i></span>` : ''}
+    <span class="time">${relTime(s.updatedAt)}</span>
+    <span class="row-actions">
+      <button class="act" data-smenu="${s.id}" title="更多" aria-label="更多">${ICON.ellipsis}</button>
+    </span>
+  </div>`;
+}
+
+/* ============================================================
+   状态条
+   ============================================================ */
+function renderStatus(){
+  const n = sessions.length;
+  $('statusBar').innerHTML =
+    `分组 <b>${state.groupBy==='grouped'?'按工作区':'单列表'}</b>` +
+    ` · 排序 <b>${state.orderBy==='recent'?'最近更新':'手动排序'}</b>` +
+    ` · 会话 <b>${n}</b>` +
+    ` · 工作区 <b>${workspaces.length}</b>` +
+    (state.query.trim() ? ` · 搜索 <b>${esc(state.query.trim())}</b>` : '');
+}
+
+/* ============================================================
+   行交互绑定
+   ============================================================ */
+function bindRows(){
+  // 工作区行：点击折叠/展开
+  listArea.querySelectorAll('[data-ws]').forEach(row => {
+    row.addEventListener('click', e => {
+      if(e.target.closest('.act')) return;
+      const key = row.dataset.ws;
+      const cur = state.expanded[key] !== false;
+      state.expanded[key] = !cur;
+      render();
+    });
+    // 右键
+    row.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      const wid = row.dataset.wsid;
+      openMenu(e.clientX, e.clientY, wid ? [
+        { label:'新建会话', icon:ICON.plus, act:() => newSessionIn(wid) },
+        { label:'重命名工作区', icon:ICON.edit, act:() => showWorkspaceNotice('rename') },
+        { label:'复制工作区路径', icon:MI_ICON.copy, act:() => copyPath((wsOf(wid)||{}).cwd || '') },
+        { sep:true },
+        { label:'删除工作区', icon:ICON.trash, danger:true, act:() => showWorkspaceNotice('delete') }
+      ] : [
+        { label:'新建会话', icon:ICON.plus, act:() => newSessionIn(undefined) },
+        { label:'添加工作区…', icon:ICON.plus, act:() => showWorkspaceNotice('create') }
+      ], row);
+      return false;
+    });
+    // 悬浮卡片（真实工作区才有；未分组没有）
+    if(row.dataset.wsid){
+      row.addEventListener('mouseenter', () => {
+        if(state.menuOpen) return;
+        const w = wsOf(row.dataset.wsid); if(!w) return;
+        showHoverCard(row, w.label, w.cwd, w.createdAt);
+      });
+      row.addEventListener('mouseleave', hideHoverCard);
+    }
+    // 拖拽排序工作区
+    row.addEventListener('dragstart', e => {
+      if(row.dataset.wsid){ e.dataTransfer.setData('text/plain','ws:'+row.dataset.wsid); e.dataTransfer.effectAllowed='move'; }
+      else e.preventDefault();
+    });
+  });
+
+  // 会话行
+  listArea.querySelectorAll('[data-session]').forEach(row => {
+    const id = row.dataset.session;
+    row.addEventListener('click', e => {
+      if(e.target.closest('.act')) return;
+      openSession(id);
+    });
+    row.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      openMenu(e.clientX, e.clientY, [
+        { label:'打开会话', icon:MI_ICON.open, act:() => openSession(id) },
+        { sep:true },
+        { label:'重命名', icon:ICON.edit, act:() => renameSession(id) },
+        { label:'分叉会话（本地草稿）', icon:ICON.fork, act:() => forkSession(id) },
+        { label:'复制会话（本地草稿）', icon:MI_ICON.copy, act:() => duplicateSession(id) },
+        { sep:true },
+        { label:'归档会话', icon:ICON.archive, act:() => archiveSession(id) },
+        { label:'删除会话', icon:ICON.trash, danger:true, act:() => deleteSession(id) }
+      ], row);
+      return false;
+    });
+    row.addEventListener('mouseenter', () => {
+      if(state.menuOpen) return;
+      const s = sessions.find(x => x.id === id); if(!s) return;
+      showHoverCard(row, s.title, wsLabel(s.ws), s.updatedAt, true);
+    });
+    row.addEventListener('mouseleave', hideHoverCard);
+
+    // 拖拽排序（两种排序模式下都可编辑当前顺序）
+    row.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain','s:'+id);
+      e.dataTransfer.effectAllowed='move';
+      row.style.opacity='.5';
+    });
+    row.addEventListener('dragend', () => { row.style.opacity=''; clearDropMarks(); });
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      const r = row.getBoundingClientRect();
+      const before = e.clientY < r.top + r.height/2;
+      clearDropMarks();
+      row.classList.add(before ? 'drop-before' : 'drop-after');
+    });
+    row.addEventListener('dragleave', () => clearDropMarks());
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      const data = e.dataTransfer.getData('text/plain') || '';
+      if(!data.startsWith('s:')) return;
+      const from = data.slice(2);
+      const r = row.getBoundingClientRect();
+      const before = e.clientY < r.top + r.height/2;
+      reorder(from, id, before);
+      clearDropMarks();
+    });
+  });
+
+  // 「展开其余」
+  listArea.querySelectorAll('[data-more]').forEach(el => {
+    el.addEventListener('click', () => { state.expandedAll[el.dataset.more] = true; render(); });
+  });
+
+  // 行内按钮
+  listArea.querySelectorAll('[data-create]').forEach(b => {
+    b.addEventListener('click', e => { e.stopPropagation(); newSessionIn(b.dataset.create); });
+  });
+  listArea.querySelectorAll('[data-smenu]').forEach(b => {
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = b.dataset.smenu, r = b.getBoundingClientRect();
+      openMenu(r.left, r.bottom + 4, [
+        { label:'打开会话', icon:MI_ICON.open, act:() => openSession(id) },
+        { sep:true },
+        { label:'重命名', icon:ICON.edit, act:() => renameSession(id) },
+        { label:'分叉会话（本地草稿）', icon:ICON.fork, act:() => forkSession(id) },
+        { label:'复制会话（本地草稿）', icon:MI_ICON.copy, act:() => duplicateSession(id) },
+        { sep:true },
+        { label:'归档会话', icon:ICON.archive, act:() => archiveSession(id) },
+        { label:'删除会话', icon:ICON.trash, danger:true, act:() => deleteSession(id) }
+      ], b.closest('.session-row'));
+    });
+  });
+  listArea.querySelectorAll('[data-wsmenu]').forEach(b => {
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const wid = b.closest('[data-wsid]').dataset.wsid, r = b.getBoundingClientRect();
+      if(!wid){ toast('未分组不能重命名'); return; }
+      openMenu(r.left, r.bottom + 4, [
+        { label:'重命名', icon:ICON.edit, act:() => showWorkspaceNotice('rename') },
+        { label:'删除工作区', icon:ICON.trash, danger:true, act:() => showWorkspaceNotice('delete') }
+      ], b.closest('.project-row'));
+    });
+  });
+
+  // 空白处右键
+  listArea.addEventListener('contextmenu', e => {
+    if(e.target.closest('[data-session]') || e.target.closest('[data-ws]')) return;
+    e.preventDefault();
+    openMenu(e.clientX, e.clientY, [
+      { label:'新建会话', icon:ICON.plus, act:() => newSessionIn(undefined) },
+      { label:'添加工作区…', icon:ICON.plus, act:() => showWorkspaceNotice('create') },
+      { sep:true },
+      { label: state.groupBy === 'grouped' ? '切换为单列表' : '切换为按工作区', icon:MI_ICON.folder,
+        act:() => { state.groupBy = state.groupBy === 'grouped' ? 'flat' : 'grouped'; syncViewChecks(); render(); } },
+      { label: state.orderBy === 'recent' ? '切换为手动排序' : '切换为最近更新', icon:ICON.alarm,
+        act:() => { state.orderBy = state.orderBy === 'recent' ? 'manual' : 'recent'; syncViewChecks(); render(); } }
+    ], null);
+  });
+}
+function clearDropMarks(){
+  listArea.querySelectorAll('.drop-before,.drop-after').forEach(el => el.classList.remove('drop-before','drop-after'));
+}
+
+/* ============================================================
+   动作
+   ============================================================ */
+/* 2026-09-25 真实会话内容：选中会话时在右框渲染该会话的真实消息（来自 /workspace/conversations） */
+function renderSessionMessages(s){
+  const body = $('mainBody');
+  let box = document.getElementById('sessionMsgBox');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'sessionMsgBox';
+    body.insertBefore(box, body.querySelector('.composer'));
+  }
+  const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
+  box.innerHTML = msgs.length ? msgs.map(m =>
+    '<div class="sess-msg' + (m.role === 'jarvis' ? ' mine' : '') + '">' +
+      '<div class="sess-msg-head"><span>' + esc(m.role === 'jarvis' ? '爱丽丝' : '用户') + '</span><span>' + esc(m.ts ? absTime(m.ts) : '') + '</span></div>' +
+      '<div class="sess-msg-text">' + esc(m.text || '') + '</div>' +
+    '</div>'
+  ).join('') : '<div class="sess-msg-empty">该会话暂无消息</div>';
+}
+function openSession(id){
+  state.selected = id;
+  const s = sessions.find(x => x.id === id);
+  if(s){
+    s.updatedAt = Date.now();                       // 最近更新模式下会置顶一次
+    if(state.orderBy === 'recent') sortToRecent();
+  }
+  $('mainHead').textContent = s ? s.title : '未选择会话';
+  renderSessionMessages(s);
+  hideHoverCard(); render();
+}
+function sortToRecent(){ sessions.sort((a,b) => b.updatedAt - a.updatedAt); }
+
+function reorder(fromId, toId, before){
+  if(fromId === toId) return;
+  const fromIdx = sessions.findIndex(s => s.id === fromId);
+  const [item] = sessions.splice(fromIdx,1);
+  let toIdx = sessions.findIndex(s => s.id === toId);
+  if(!before) toIdx += 1;
+  sessions.splice(toIdx,0,item);
+  state.orderBy = 'manual';                          // 拖拽后转入手动排序
+  syncViewChecks();
+  toast('顺序已更新（手动排序）');
+  render();
+}
+
+/* 2026-09-30 诚实化：本产品的「会话」是 /workspace/conversations 里 渠道×自然日 的聚合结果，
+   后端没有「创建会话」这个动作（workspace.js 只有 conversations GET、sessions open/rename/delete）。
+   所以这里建的**只能**是一条未持久化的草稿行：让你先把界面切到「准备开始说话」的状态。
+   它不会被写进数据库，刷新后消失是**预期行为**，不是丢数据——toast 与标题都如实说明这一点。 */
+function newSessionIn(wsKey){
+  const ws = (!wsKey || wsKey === '__ungrouped') ? undefined : wsKey;
+  let seq = 0, id = '';
+  do { id = 'draft-' + (Date.now() % 100000) + '-' + (seq++); }
+  while (sessions.some(s => s.id === id));   // 同一毫秒内连点两次也不会重号
+  sessions.unshift({ id, ws, title:'新会话草稿', updatedAt: Date.now(), pending:null, snippet:'', blank:true, _draft:true });
+  if(ws) state.expanded[ws] = true; else state.expanded['__ungrouped'] = true;
+  state.selected = id;
+  $('mainHead').textContent = '新会话草稿（未保存）';
+  render();
+  toast('已新建未保存的会话草稿：未写入数据库，刷新后消失');
+}
+
+/* 2026-09-30 删掉「凭空造工作区」：本产品**没有**工作区这个持久实体。
+   左侧的「工作区分组」是 loadRealSessions() 把 conversations 表按**渠道**聚合出来的
+   （LOCAL=本地会话 / WECHAT=微信 / …，label 由渠道名派生，见 loadRealSessions）。
+   workspace.js 只有 /workspace/conversations、/workspace/sessions/open|rename|delete 和
+   /workspace/skills*，没有任何「建工作区 / 存工作区」的端点，所以点了也无处可落。
+   下面这个提示替代了原来那句「已添加工作区（演示数据）」——原来那句既说成功又把
+   「演示数据」四个字露在界面上，是典型的假动作。 */
+function showWorkspaceNotice(kind){
+  const text = kind === 'rename'
+    ? '工作区名由会话来源（渠道）派生，本页不支持重命名；来源名在主界面渠道配置处修改。'
+    : kind === 'delete'
+      ? '工作区是按渠道从会话记录聚合出来的，没有可删除的独立实体；会话记录请用「删除会话」。'
+      : '本产品没有可新增的工作区实体：左侧分组由会话记录按渠道聚合而来，产生新分组的方式是在新渠道里产生对话。';
+  toast(text);
+}
+
+function renameSession(id){
+  const s = sessions.find(x => x.id === id); if(!s) return;
+  openDialog({
+    title:'重命名会话',
+    value:s.title,
+    ok:'确定',
+    onOk:v => {
+      if(v === null) return;
+      const persist = s._real ? realApi() : null;
+      if(persist){
+        /* 先落库再报成功：失败走 catch 如实报错，且不改内存标题（避免「界面说改了、库里没改」） */
+        persist('/workspace/sessions/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id,title:v})})
+          .then(() => { s.title = v; toast('已重命名'); render(); })
+          .catch(err => toast('重命名保存失败：' + err.message));
+        return;
+      }
+      /* 只有非真实会话（本地草稿）才允许只改内存，并如实说明刷新后不保留 */
+      s.title = v; toast('已重命名（本地草稿，未写入数据库）'); render();
+    }
+  });
+}
+/* 2026-09-30 删掉本地的 renameWorkspace / deleteWorkspace：
+   两者原来只改内存里的 workspaces/sessions 数组，toast 却说「已重命名」「已删除工作区，
+   会话已落到未分组」。可 workspaces 每次 loadRealSessions() 都会**按渠道重新推导**，
+   改完/删完一刷新就原样回来——用户以为自己删掉了，实际什么都没发生。
+   现在由 showWorkspaceNotice() 如实说明「工作区不是可增删的实体」。 */
+function archiveSession(id){
+  /* 2026-10-01 接线真实归档：后端已经落地「归档」概念
+     （routes/session-archive.js：POST /session/archive {sessionId}，落 archived_sessions 表）。
+     原来的注释说「后端没有归档概念」——那是在归档后端落地**之前**写的，现在是错的，
+     文案必须跟着改，否则用户看到「刷新后原样回来」而实际已经落库。
+     落库语义沿用本文件既有纪律：**先落库再报成功**，失败如实报错且**不改内存**
+     （否则会出现「界面说归档了、库里没有」，正是 2026-09-30 那轮修掉的病）。 */
+  const s = sessions.find(x => x.id === id);
+  const persist = s && s._real ? realApi() : null;
+  if(persist){
+    persist('/session/archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id})})
+      .then(function(body){
+        const n = body && Array.isArray(body.archivedSessionIds) ? body.archivedSessionIds.length : null;
+        sessions = sessions.filter(x => x.id !== id);
+        if(state.selected === id) state.selected = null;
+        toast(n === null ? '已归档（已写入后端）' : '已归档（已写入后端，当前共 ' + n + ' 条）');
+        render();
+      })
+      .catch(err => toast('归档失败：' + err.message));
+    return;
+  }
+  /* 非真实会话（本地草稿）后端里不存在，只能本地隐藏——如实说明，不冒充落库。 */
+  sessions = sessions.filter(s => s.id !== id);
+  toast('已归档（本地草稿，后端没有这条会话，刷新后消失）');
+  render();
+}
+function forkSession(id){
+  const s = sessions.find(x => x.id === id); if(!s) return;
+  // 在最后一个已完成轮次处 fork，继承标题并递增
+  const m = s.title.match(/^(.*?)(?: \((\d+)\))?$/);
+  const base = m[1], n = m[2] ? Number(m[2]) + 1 : 1;
+  const nid = 's-' + (Date.now() % 100000);
+  /* 2026-09-30 诚实化：这是本页内存里造的一条**本地草稿**，后端没有「分叉会话」这个概念
+     （没有分叉端点，也没有可写的父/子会话字段），刷新即消失。文案如实说明，不冒充落库成功。 */
+  sessions.unshift({ id:nid, ws:s.ws, title:`${base} (${n})`, updatedAt:Date.now(), pending:null, snippet:s.snippet, blank:true, _draft:true });
+  state.selected = nid;
+  $('mainHead').textContent = `${base} (${n})`;
+  toast('已分叉为本地草稿：' + `${base} (${n})` + '（未写入数据库，刷新后消失）');
+  render();
+}
+
+/* 2026-09-30 修复静默不落库：真正的 apiFetch 定义在第二个 IIFE 的闭包里，本 IIFE 拿不到
+   它——原来写 `typeof apiFetch === 'function'`，而 typeof 对**未声明**变量恒为 'undefined'
+   （不抛错），于是重命名/删除的落库分支永远走不到，代码静默退回内存分支却照旧 toast 成功。
+   现在统一走第二个 IIFE 挂在 window.__blmApi.fetch 上的那条全局通道。 */
+function realApi(){
+  const ch = window.__blmApi;
+  const fn = ch && ch.fetch;
+  return typeof fn === 'function' ? fn : null;
+}
+/* ============================================================
+   悬浮卡片
+   ============================================================ */
+const hoverCard = $('hoverCard');
+/* 卡片要放在行右侧，至少留这么宽才显示；不够就干脆不显示（窄浮框里就是这种情况），
+   否则卡片会盖住鼠标所在的那一行，触发 mouseenter/mouseleave 抖动。 */
+const MIN_HOVER_CARD_ROOM = 180;
+function showHoverCard(row, title, sub, ts, isSession){
+  $('hcTitle').textContent = title;
+  $('hcPath').textContent = sub;
+  $('hcTime').textContent = isSession ? ('更新于 ' + absTime(ts)) : ('创建于 ' + absTime(ts));
+  const r = row.getBoundingClientRect();
+  hoverCard.classList.add('show');
+  const h = hoverCard.offsetHeight;
+  const room = window.innerWidth - r.right - 8;
+  if (room < MIN_HOVER_CARD_ROOM) { hideHoverCard(); return; }
+  hoverCard.style.left = (r.right + 8) + 'px';
+  hoverCard.style.top  = Math.max(8, Math.min(r.top, window.innerHeight - h - 8)) + 'px';
+}
+function hideHoverCard(){ hoverCard.classList.remove('show'); }
+
+/* ============================================================
+   右键菜单
+   ============================================================ */
+const MI_ICON = {
+  copy:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="5.4" y="5.4" width="7.8" height="7.8" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M10.6 5.4V4.2c0-.7-.5-1.2-1.2-1.2H4.2c-.7 0-1.2.5-1.2 1.2v5.2c0 .7.5 1.2 1.2 1.2h1.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  folder:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h2.9l1.4 1.6h6c.6 0 1.1.5 1.1 1.1v5.9c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1V4.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  open:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9.4 3.4h3.2v3.2M12.6 3.4L7.9 8.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.2 9.8v2.4c0 .7-.5 1.2-1.2 1.2H3.8c-.7 0-1.2-.5-1.2-1.2V5c0-.7.5-1.2 1.2-1.2h2.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>'
+};
+
+const menu = $('menu');
+let menuItems = [], menuIndex = -1, menuAnchor = null;
+
+function openMenu(x, y, items, row){
+  state.menuOpen = true;
+  menuAnchor = row || null;
+  menuItems = items;
+  menuIndex = -1;
+  if(row) row.classList.add('menu-open');
+  hideHoverCard();
+  menu.innerHTML = items.map((it,i) =>
+    (it.sep ? '<div class="menu-sep" role="separator"></div>' :
+    `<button type="button" role="menuitem" class="menu-item${it.danger?' danger':''}" data-mi="${i}"${it.disabled?' disabled':''}>${it.icon||''}<span class="menu-label">${esc(it.label)}</span></button>`)
+  ).join('');
+  menu.classList.add('show');
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  menu.style.left = Math.max(8, Math.min(x, window.innerWidth - w - 8)) + 'px';
+  menu.style.top  = Math.max(8, Math.min(y, window.innerHeight - h - 8)) + 'px';
+  menu.querySelectorAll('[data-mi]').forEach(b => {
+    b.addEventListener('click', () => runMenuItem(Number(b.dataset.mi)));
+  });
+  const first = menu.querySelector('[data-mi]:not([disabled])');
+  if(first) first.focus();
+}
+function runMenuItem(i){
+  const it = menuItems[i];
+  if(!it || it.disabled || it.sep) return;
+  closeMenu(true);
+  if(it.act) it.act();
+}
+function moveMenuIndex(step){
+  const btns = [...menu.querySelectorAll('[data-mi]:not([disabled])')];
+  if(!btns.length) return;
+  const cur = btns.findIndex(b => Number(b.dataset.mi) === menuIndex);
+  const next = cur < 0 ? (step > 0 ? 0 : btns.length - 1) : (cur + step + btns.length) % btns.length;
+  menuIndex = Number(btns[next].dataset.mi);
+  btns[next].focus();
+}
+function closeMenu(restoreFocus){
+  if(!state.menuOpen) return;
+  state.menuOpen = false;
+  menu.classList.remove('show');
+  menuIndex = -1;
+  listArea.querySelectorAll('.menu-open').forEach(el => el.classList.remove('menu-open'));
+  if(restoreFocus && menuAnchor && menuAnchor.isConnected){
+    const f = menuAnchor.querySelector('.act') || menuAnchor;
+    if(f && typeof f.focus === 'function') f.focus();
+  }
+  menuAnchor = null;
+}
+document.addEventListener('keydown', e => {
+  if(!state.menuOpen) return;
+  if(e.key === 'ArrowDown'){ e.preventDefault(); moveMenuIndex(1); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); moveMenuIndex(-1); }
+  else if(e.key === 'Home'){ e.preventDefault(); menuIndex = -1; moveMenuIndex(1); }
+  else if(e.key === 'End'){ e.preventDefault(); menuIndex = -1; moveMenuIndex(-1); }
+  else if(e.key === 'Enter' || e.key === ' '){
+    const b = menu.querySelector('[data-mi]:focus');
+    if(b){ e.preventDefault(); runMenuItem(Number(b.dataset.mi)); }
+  }
+  else if(e.key === 'Escape'){ e.preventDefault(); closeMenu(true); }
+});
+function duplicateSession(id){
+  const s = sessions.find(x => x.id === id); if(!s) return;
+  const m = s.title.match(/^(.*?)(?: \((\d+)\))?$/);
+  const base = m[1], n = m[2] ? Number(m[2]) + 1 : 1;
+  const nid = 's-' + (Date.now() % 100000);
+  /* 2026-09-30 诚实化：同 forkSession——内存里的本地草稿，后端没有「复制会话」端点，
+     不可持久化；原来只说「已复制会话」，看起来像落库了。 */
+  sessions.unshift({ id:nid, ws:s.ws, title:`${base} (${n})`, updatedAt:Date.now(), pending:null, snippet:s.snippet, blank:true, _draft:true });
+  state.selected = nid;
+  $('mainHead').textContent = `${base} (${n})`;
+  toast('已复制为本地草稿：' + `${base} (${n})` + '（未写入数据库，刷新后消失）');
+  render();
+}
+function deleteSession(id){
+  const s = sessions.find(x => x.id === id); if(!s) return;
+  openDialog({
+    title:'删除会话',
+    desc:`会话「${s.title}」的聊天记录将从数据库删除，此操作不可撤销。`,
+    input:false,
+    ok:'删除', danger:true,
+    onOk:() => {
+      /* 2026-09-25 动真格：真实会话删除 = 删 conversations 表该 渠道×自然日 的消息行
+         2026-09-30 修守卫：原来裸引用 apiFetch（跨 IIFE 不可见，typeof 恒 'undefined'），
+         删除的落库分支永远走不到；现在通过 window.__blmApi.fetch 调用。 */
+      const persist = s._real ? realApi() : null;
+      if(persist){
+        persist('/workspace/sessions/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id,channel:s._ch,date:s._day})})
+          .then(function(){
+            sessions = sessions.filter(x => x.id !== id);
+            if(state.selected === id) state.selected = null;
+            toast('已删除会话');
+            render();
+          })
+          .catch(err => toast('删除失败：' + err.message));
+        return;
+      }
+      sessions = sessions.filter(x => x.id !== id);
+      if(state.selected === id) state.selected = null;
+      toast('已删除会话（本地草稿，未写入数据库）');
+      render();
+    }
+  });
+}
+function copyPath(text){
+  if(!text){ toast('没有可复制的路径'); return; }
+  const done = () => toast('已复制路径：' + text);
+  const fallback = () => {
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove(); done();
+    }catch(err){ toast('复制失败，请手动复制：' + text); }
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } else fallback();
+}
+document.addEventListener('click', e => {
+  if(!menu.contains(e.target)) closeMenu();
+  if(!$('viewPop').contains(e.target) && !e.target.closest('#viewBtn')) $('viewPop').classList.remove('show');
+});
+document.addEventListener('contextmenu', e => { if(!e.target.closest('#listArea')) closeMenu(); });
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){ closeMenu(); $('viewPop').classList.remove('show'); closeSearch(); hideHoverCard(); }
+});
+
+/* ============================================================
+   视图选项
+   ============================================================ */
+const viewPop = $('viewPop');
+$('viewBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  const show = !viewPop.classList.contains('show');
+  viewPop.classList.toggle('show', show);
+  if(show){
+    viewPop.style.left = Math.min(r.left, window.innerWidth - 200) + 'px';
+    viewPop.style.top = (r.bottom + 6) + 'px';
+  }
+});
+viewPop.querySelectorAll('[data-group]').forEach(el => {
+  el.addEventListener('click', () => {
+    state.groupBy = el.dataset.group;
+    syncViewChecks(); viewPop.classList.remove('show'); render();
+  });
+});
+viewPop.querySelectorAll('[data-order]').forEach(el => {
+  el.addEventListener('click', () => {
+    state.orderBy = el.dataset.order;
+    if(state.orderBy === 'recent') sortToRecent();
+    syncViewChecks(); viewPop.classList.remove('show'); render();
+  });
+});
+function syncViewChecks(){
+  viewPop.querySelectorAll('[data-check]').forEach(el => {
+    const k = el.dataset.check;
+    el.textContent = ((k==='grouped'||k==='flat') ? state.groupBy===k : state.orderBy===k) ? '✓' : '';
+  });
+}
+syncViewChecks();
+
+/* ============================================================
+   折叠搜索：激活后输入框占据区头，非空查询以单一扁平结果列表替代浏览模式
+   ============================================================ */
+const search = $('search'), searchInput = $('searchInput'), searchSlot = $('searchSlot'),
+      sectionLabel = $('sectionLabel'), headerActions = $('headerActions'), clearBtn = $('clearBtn');
+let searchTimer = null;
+
+function openSearch(){
+  state.searchOpen = true;
+  search.classList.add('expanded');
+  searchSlot.classList.add('expanded');
+  sectionLabel.classList.add('hidden');
+  headerActions.classList.add('hidden');
+  searchInput.focus();
+}
+function closeSearch(){
+  if(!state.searchOpen) return;
+  state.searchOpen = false;
+  state.query = '';
+  searchInput.value = '';
+  search.classList.remove('expanded');
+  searchSlot.classList.remove('expanded');
+  sectionLabel.classList.remove('hidden');
+  headerActions.classList.remove('hidden');
+  clearBtn.style.display = 'none';
+  render();
+}
+$('searchBtn').addEventListener('click', e => { e.stopPropagation(); openSearch(); });
+search.addEventListener('click', () => openSearch());
+clearBtn.addEventListener('click', e => { e.stopPropagation(); searchInput.value=''; state.query=''; clearBtn.style.display='none'; render(); });
+searchInput.addEventListener('input', () => {
+  clearBtn.style.display = searchInput.value ? 'inline-flex' : 'none';
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {           // 250ms 防抖（照 DSH）
+    state.query = searchInput.value;
+    render();
+  }, 250);
+});
+searchInput.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){ e.stopPropagation(); closeSearch(); }
+  if(e.key === 'Enter'){ clearTimeout(searchTimer); state.query = searchInput.value; render(); }
+});
+$('newWsBtn').addEventListener('click', () => showWorkspaceNotice('create'));
+
+/* ============================================================
+   对话框 / 提示
+   ============================================================ */
+const scrim = $('scrim');
+let dlgCb = null;
+function openDialog({ title, desc, value, input = true, ok = '确定', danger = false, onOk }){
+  $('dlgTitle').textContent = title;
+  const d = $('dlgDesc');
+  if(desc){ d.textContent = desc; d.style.display = 'block'; } else { d.style.display = 'none'; }
+  const i = $('dlgInput');
+  i.style.display = input ? 'block' : 'none';
+  i.value = value || '';
+  const okBtn = $('dlgOk');
+  okBtn.textContent = ok;
+  okBtn.className = 'btn ' + (danger ? 'danger' : 'primary');
+  dlgCb = onOk;
+  scrim.classList.add('show');
+  if(input) setTimeout(() => { i.focus(); i.select(); }, 0);
+}
+function closeDialog(){ scrim.classList.remove('show'); dlgCb = null; }
+$('dlgCancel').addEventListener('click', closeDialog);
+$('dlgOk').addEventListener('click', () => {
+  const cb = dlgCb, v = $('dlgInput').style.display === 'none' ? null : $('dlgInput').value.trim();
+  closeDialog();
+  if(cb) cb(v);
+});
+scrim.addEventListener('click', e => { if(e.target === scrim) closeDialog(); });
+$('dlgInput').addEventListener('keydown', e => { if(e.key === 'Enter') $('dlgOk').click(); });
+
+const toastEl = $('toast');
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
+
+/* ============================================================
+   定时任务数据（语义照 dsh-client-ui-schedule）
+   —— 只读目录：逾期在前，其后按目标时间排序；时间用浏览器本地时钟派生
+   —— 供左侧一栏的「定时任务」区直接内联渲染，不再有会话头部触发器
+   ============================================================ */
+const CHEVRON_DOWN = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6.5L8 10.5L12 6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/* 记录：kind 'every' 带 everySeconds，'once' 只发生一次（frequency.once = 单次） */
+let schedules = [];
+/* 上面的空数组是故意的：真实提醒数据源是 GET /schedules（下方 loadSchedules() 填充
+   schedTasks/schedRuns）。本数组只服务 .app 演示层（已隐藏）的 fn-sec「定时任务」列表。 */
+
+/* 频率文案：只取能整除的最大完整单位，绝不舍入 */
+const UNIT_SECONDS = [{unit:'天',seconds:86400},{unit:'小时',seconds:3600},{unit:'分钟',seconds:60},{unit:'秒',seconds:1}];
+function frequencyLabel(rec){
+  if(rec.kind !== 'every') return '单次';
+  let sel = UNIT_SECONDS[UNIT_SECONDS.length-1];
+  for(const c of UNIT_SECONDS){ if(rec.everySeconds % c.seconds !== 0) continue; sel = c; break; }
+  return (rec.everySeconds / sel.seconds) + sel.unit + '一次';
+}
+/* 持久化的目标时间，按浏览器本地语言与时区呈现 */
+function localTime(ts){
+  return new Intl.DateTimeFormat(document.documentElement.lang || 'zh-CN', {dateStyle:'medium', timeStyle:'short'}).format(ts);
+}
+/* 相对目标：取最大的自然时钟单位 */
+function relativeLabel(ts, now){
+  const diff = ts - now;
+  if(diff === 0) return '现在到期';
+  const abs = Math.abs(diff)/1000;
+  const sel = UNIT_SECONDS.find(c => abs >= c.seconds) || UNIT_SECONDS[UNIT_SECONDS.length-1];
+  const value = Math.max(1, diff > 0 ? Math.ceil(abs/sel.seconds) : Math.floor(abs/sel.seconds));
+  return diff > 0 ? (value + sel.unit + '后') : ('已逾期 ' + value + sel.unit);
+}
+/* 逾期在前，其后按目标时间升序，完全同刻保持稳定 */
+function orderedSched(now){
+  return schedules.map((r,i)=>({r,i})).sort((a,b)=>{
+    const ao = a.r.scheduledAt <= now, bo = b.r.scheduledAt <= now;
+    if(ao !== bo) return Number(bo) - Number(ao);
+    return (a.r.scheduledAt - b.r.scheduledAt) || (a.i - b.i);
+  }).map(x=>x.r);
+}
+/* ============================================================
+   扩展技能（复刻 dsh-client-ui-skill）
+   —— / 输入触发源（trigger '/'，order 2）+ skill 工具行（tool.call.toolview 的 key 'skill'）
+   ============================================================ */
+const SKILL_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.8l1.7 4.1 4.4.3-3.4 2.8 1.1 4.3L8 11l-3.8 2.3 1.1-4.3L1.9 6.2l4.4-.3L8 1.8z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>';
+const INSPECT_ICON = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2L13.5 13.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
+const SKILLS = [];
+/* 真实技能目录来自 GET /workspace/skills（见下方 loadSkillsFromHost()）：宿主返回空目录时
+   这里就是空列表，绝不拿假条目冒充真实技能。本数组只服务 .app 演示层（已被 .app{display:none}
+   整层隐藏）里的 / 建议菜单与 fn-sec 技能目录。 */
+
+/* rankByName：前缀命中排最前，其余按有序子序列匹配，同分保持宿主顺序 */
+function rankSkills(q){
+  const query = q.toLowerCase();
+  const score = name => {
+    const n = name.toLowerCase();
+    if(!query) return 0;
+    if(n.startsWith(query)) return 3;
+    let i = 0;
+    for(const ch of n){ if(ch === query[i]) i++; if(i === query.length) return 2; }
+    return -1;
+  };
+  return SKILLS.map((s,i) => ({ s, sc: score(s.name), i }))
+    .filter(x => x.sc >= 0)
+    .sort((a,b) => b.sc - a.sc || a.i - b.i)
+    .map(x => x.s);
+}
+
+const composerInput = $('composerInput'), slashMenu = $('slashMenu');
+
+/* 建议项文案：不可被模型调用的技能，描述前缀「仅用户 · 」 */
+function candidateDesc(s){ return (s.modelInvocable ? '' : '仅用户 · ') + s.desc; }
+
+function renderSlash(){
+  const m = composerInput.value.match(/^\/([^\s]*)$/);
+  if(!m){ slashMenu.classList.remove('show'); return; }
+  const list = rankSkills(m[1]);
+  slashMenu.innerHTML = list.length ? list.map((s,i) =>
+    `<div class="slash-item${i===0?' active':''}" data-skill="${esc(s.name)}" role="option">
+       <span class="slash-name">/${esc(s.name)}</span>
+       <span class="slash-desc">${esc(candidateDesc(s))}</span>
+     </div>`).join('') : '<div class="slash-empty">无匹配技能</div>';
+  slashMenu.classList.add('show');
+  slashMenu.querySelectorAll('[data-skill]').forEach(el => {
+    el.addEventListener('mousedown', e => { e.preventDefault(); invokeSkill(el.dataset.skill); });
+  });
+}
+
+/* 首行：折叠态的错误摘要与畸形参数兜底都只取第一物理行 */
+function firstLine(text){ const i = String(text).indexOf('\n'); return i === -1 ? String(text) : String(text).slice(0, i); }
+
+let skillRows = [];
+/* 真实 skill 工具行由宿主会话渲染，本页不再预置演示行。
+   本数组只服务 .app 演示层（已隐藏）的 #skillArea。 */
+let skillSeq = 3;
+
+/* 调用：本函数只服务 .app 演示层（整层被 .app{display:none !important} 隐藏，且 SKILLS 恒为
+   空数组——/ 建议菜单与 invokeSkill 都调不到），本页**没有真实发送通道**：真实 skill 工具行
+   由宿主会话渲染。 */
+function invokeSkill(name){
+  composerInput.value = '';
+  slashMenu.classList.remove('show');
+  const sk = SKILLS.find(x => x.name === name);
+  const id = 'sk-' + (++skillSeq);
+  /* skillId = 真实技能目录里的 id，供「查看」按钮 POST /workspace/skills/open 用；
+     row.id 只是这张工具行的 DOM 标识，两者不能混。 */
+  const row = { id, skillId: (sk && sk.id) || name, name, state:'running', expanded:false, output:null };
+  skillRows.unshift(row);
+  renderSkills();
+  toast('演示层模拟：未真正发出 /' + name + '（本页没有发送通道，以下输出为模拟内容）');
+  /* 下面这段输出是**模拟内容**（不是真实工具输出），仅为让隐藏的 .app 演示层看起来完整。
+     标注至此：不要把它当成真实 skill_content。 */
+  setTimeout(() => {
+    row.state = 'ok';
+    row.output = '<skill_content name="' + name + '" data-simulated="true">\n' + (sk ? sk.desc : '') +
+                 '\n（模拟内容：非真实工具输出）\n</skill_content>';
+    renderSkills();
+  }, 1000);
+}
+
+function renderSkills(){
+  $('skillArea').innerHTML = skillRows.map(r => {
+    const expandable = r.output !== null;
+    const open = r.expanded && expandable;
+    /* 前导槽：静止时状态图标，悬停或展开时换成箭头 */
+    let leading;
+    if(open) leading = `<span class="skill-chev">${CHEVRON_DOWN}</span>`;
+    else if(r.state === 'error') leading = '<span class="skill-dot error"></span>';
+    else if(r.state === 'stopped') leading = '<span class="skill-dot warning"></span>';
+    else if(expandable) leading = `<span class="skill-icon-idle">${SKILL_ICON}</span><span class="skill-chev-hover"><span class="skill-chev">${CHEVRON_DOWN}</span></span>`;
+    else leading = SKILL_ICON;
+    const status = r.state === 'running' ? '正在加载 skill'
+                 : r.state === 'error' ? 'skill 加载失败'
+                 : r.state === 'stopped' ? 'skill 加载已中止' : '';
+    const summary = r.state === 'error' ? firstLine(r.output) : r.name;
+    return `<div class="skill-card" data-tool="skill" data-state="${r.state}">
+      <div class="skill-row" data-skill-row="${r.id}"${expandable?' data-expandable role="button" tabindex="0" aria-expanded="'+(open?'true':'false')+'"':''}>
+        <span class="skill-leading">${leading}</span>
+        ${status ? `<span class="skill-sr">${status}</span>` : ''}
+        <span class="skill-title">Skill</span>
+        <span class="skill-sep" aria-hidden="true"></span>
+        <span class="skill-summary${r.state==='error'?' err':''}">${esc(summary)}</span>
+      </div>
+      ${open ? `<div class="skill-body">
+        <section class="skill-box" aria-label="说明">
+          <div class="skill-box-head">说明</div>
+          <pre class="skill-pre"${r.state==='error'?' data-error':''}>${esc(r.output)}</pre>
+        </section>
+        <button type="button" class="skill-inspect" data-inspect="${r.id}">${INSPECT_ICON}查看</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  $('skillArea').querySelectorAll('[data-skill-row]').forEach(el => {
+    const r = skillRows.find(x => x.id === el.dataset.skillRow);
+    if(!r || r.output === null) return;             /* 无可展开内容时不响应 */
+    const toggle = () => { r.expanded = !r.expanded; renderSkills(); };
+    el.addEventListener('click', toggle);
+    el.addEventListener('keydown', e => {
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault(); toggle();
+    });
+  });
+  $('skillArea').querySelectorAll('[data-inspect]').forEach(b => {
+    /* 2026-09-30 修死代码 + 去假动作：原来这里只 `toast('打开标准轨迹 Inspect')`——什么都没做，
+       而且该回调一度引用了本 IIFE 里不存在的 apiFetch（跨 IIFE ReferenceError）。
+       现在接到真实动作 POST /workspace/skills/open 打开该技能所在目录（后端确有该端点）；
+       本页也没有「标准轨迹」这个概念，所以不再假装能打开轨迹。 */
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const r = skillRows.find(x => x.id === b.dataset.inspect);
+      const call = realApi();
+      if(!call){ toast('本页拿不到后端接口，无法打开技能目录'); return; }
+      call('/workspace/skills/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r ? r.skillId : b.dataset.inspect})})
+        .then(body => toast('已打开技能目录：' + body.dir))
+        .catch(err => toast('打开技能目录失败：' + err.message));
+    });
+  });
+}
+
+composerInput.addEventListener('input', renderSlash);
+composerInput.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && slashMenu.classList.contains('show')){
+    e.preventDefault();
+    const first = slashMenu.querySelector('[data-skill]');
+    if(first) invokeSkill(first.dataset.skill);
+  } else if(e.key === 'Escape'){
+    e.stopPropagation();
+    slashMenu.classList.remove('show');
+  }
+});
+/* ============================================================
+   左侧一栏：定时任务 / 扩展技能 / 工作区
+   —— 自上而下同处一栏；内容直接内联渲染，不弹浮框
+   ============================================================ */
+
+/* 提醒面板没有独立导航入口（2026-09-29 定）：
+   它由「定时任务」页的「手动创建」和主界面的 /schedules 命令打开——
+   入口与「定时任务」重合，再单列一个只会让人点错。 */
+$('fnSchedIcon').innerHTML = ICON.alarm;
+$('fnSkillIcon').innerHTML = SKILL_ICON;
+$('fnPortIcon').innerHTML = ICON.archive;   /* 移植能力区图标：复用归档图标，不新增 SVG */
+const fnSchedBody = $('fnSchedBody');
+const fnSkillBody = $('fnSkillBody');
+const fnPortBody = $('fnPortBody');
+
+/* 区头右侧计数：行数与状态一眼可见 */
+function fnCountHTML(n){ return `<span class="fn-count">${n}</span>`; }
+
+function fnSchedHTML(now){
+  now = now || Date.now();
+  const rows = orderedSched(now);
+  return '<div class="fn-head"><span>活动提醒</span>' + fnCountHTML(rows.length) + '</div>' +
+    rows.map(r => {
+      const od = r.scheduledAt <= now;
+      return `<div class="fn-row${od?' overdue':''}" data-sched="${esc(r.id)}" data-ts="${r.scheduledAt}">
+        <span class="fn-status"><span class="fn-dot" aria-hidden="true"></span><span data-role="state">${od?'已逾期':'等待中'}</span></span>
+        <span class="fn-prompt">${esc(r.prompt)}</span>
+        <span class="fn-meta">
+          <span>${frequencyLabel(r)}</span>
+          <span aria-hidden="true">·</span>
+          <span>${localTime(r.scheduledAt)}</span>
+          <span aria-hidden="true">·</span>
+          <span class="rel${od?' od':''}" data-rel-ts="${r.scheduledAt}">${relativeLabel(r.scheduledAt, now)}</span>
+        </span>
+      </div>`;
+    }).join('');
+}
+function fnSkillHTML(){
+  const list = rankSkills('');
+  return '<div class="fn-head"><span>技能目录</span>' + fnCountHTML(list.length) + '</div>' +
+    list.map(s => `
+    <div class="fn-row" data-fn-skill="${esc(s.name)}" role="button" tabindex="0" title="点一下填入 /${esc(s.name)}">
+      <span class="fn-status"><span class="fn-dot${s.modelInvocable?'':' user-only'}" aria-hidden="true"></span><span>${s.modelInvocable?'可调用':'仅用户'}</span></span>
+      <span class="fn-prompt">/${esc(s.name)}</span>
+      <span class="fn-meta"><span class="fn-desc">${esc(s.desc)}</span><span class="fn-fill">填入</span></span>
+    </div>`).join('');
+}
+/* ── 移植能力：状态与动作（2026-10-01）──────────────────────────────────
+   三个入口都必须真的打到后端/宿主，不许只是弹个提示充数：
+     · 远程机器 → POST /api-ssh（信封 {ok,value}），走 SSH 路由的 machine.list
+     · 已归档   → GET /session/archive 取集合，取消归档走 POST /session/archive/restore
+     · 桌宠     → 经 window.alice.pet（preload 暴露的 contextBridge 白名单）
+   拿不到能力时**如实说明拿不到**，不假装成功。
+
+   ⚠️ SSH 的真实方法名（2026-10-01 实测核对，别照抄直觉）：
+     机器管理是 machine.save / machine.remove——**没有 machine.upsert**；
+     参数键是 machineId——**不是 id**；机器档案放在 payload.row，密钥放在 payload.secrets。
+     本区目前只调 machine.list，上面这些记在这里是为了下次扩展时不再写错。 */
+let sshMachines = null;     /* null = 还没查过 */
+let archivedIds = null;
+let petVisible = false;
+
+/* 远程机器：SSH 路由的信封是**请求 { method, payload }**、**响应 { ok, value|error }**
+   （见 runtime/ssh-core.js 的 preflight / success / businessFailure——字段名逐字核对过，
+   不是 result 也不是 params）。业务错误同样是 HTTP 200，所以必须看 ok 而不是只看状态码。 */
+function sshCall(method, payload){
+  const call = realApi();
+  if(!call) return Promise.reject(new Error('本页拿不到后端接口'));
+  return call('/api-ssh', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ method: method, payload: payload || {} }),
+  }).then(function(env){
+    if(env && env.ok === false){
+      const e = env.error || {};
+      throw new Error(e.message || e.code || 'ssh 调用失败');
+    }
+    return env && env.value !== undefined ? env.value : env;
+  });
+}
+
+function openPortPanel(which){
+  if(which === 'ssh'){
+    sshCall('machine.list').then(function(value){
+      /* 按**契约字段**取，不再猜形状。
+         契约（DSH machine.list）：{ enabled:bool, items:[...], discovered:[...] }。
+         原先写的是 `value.machines || value.list || value`——三重猜测。
+         它当时"能用"纯属侥幸：后端返回裸数组，三个猜测里最后一个恰好命中。
+         一旦后端改成契约形状（`items`），这个猜测链就会静默取到空列表，
+         界面显示"还没有添加任何机器"——**机器明明在，却报没有**。
+         猜形状的兜底比不写兜底更危险：它让错误形状看起来是正常空集。 */
+      const items = (value && Array.isArray(value.items)) ? value.items : null;
+      if(items === null){ sshMachines = null; toast('远程机器：接口返回的形状不认识（缺少 items）'); return; }
+      sshMachines = items;
+      if(!sshMachines.length){ toast('远程机器：还没有添加任何机器'); return; }
+      /* 这里原先**只报台数**，可入口的说明写的是「连接 / 隧道 / TOFU」——
+         文案承诺的三件事一件都没做。后端其实暴露了 13 个方法，本区只调了 1 个。
+         **列一个点了看不出反应、且与描述不符的入口，比不列更糟。**
+         现在真的去连第一台：machine.connect 会走真实传输层，
+         成功给出 tunnelBaseUrl 与状态，失败把真实原因（含 TOFU 主机密钥不符）报出来。
+         **不缓存、不假装**：每次点击都是一次真实尝试。 */
+      const first = sshMachines[0];
+      const name = first.name || first.id || '未命名';
+      toast('远程机器 ' + sshMachines.length + ' 台，正在连接「' + name + '」…');
+      return sshCall('machine.connect', { machineId: first.id }).then(function(link){
+        const state = (link && link.state) ? link.state : 'unknown';
+        const tunnel = (link && link.tunnelBaseUrl) ? '，隧道 ' + link.tunnelBaseUrl : '，无隧道';
+        toast('「' + name + '」连接结果：' + state + tunnel);
+        renderFnSections();
+      }).catch(function(err){
+        /* 连不上就说连不上，并把真实原因带上 —— 失败分类（unreachable / auth / host-key…）
+           是 SSH 这块最有价值的信息，吞掉它等于把这个功能退化成一个开关。 */
+        toast('「' + name + '」连接失败：' + err.message);
+        renderFnSections();
+      });
+    }).catch(function(err){
+      sshMachines = null;
+      toast('远程机器接口不可用：' + err.message);
+    });
+    return;
+  }
+  if(which === 'archive'){
+    const call = realApi();
+    if(!call){ toast('本页拿不到后端接口，无法读取归档集合'); return; }
+    call('/session/archive').then(function(ledger){
+      archivedIds = (ledger && Array.isArray(ledger.archivedSessionIds)) ? ledger.archivedSessionIds : [];
+      if(!archivedIds.length){ toast('已归档会话：当前没有归档项'); return; }
+      /* 展示**给人看的东西**，不是内部标识符。
+         原先直接 join(session id)，用户看到的是 `ch-tui-2026-09-27、ch-api-2026-09-28` ——
+         那是 session_key，是机器读的，不是人读的。而 meta 里正好有可读信息：
+           · title      用户给会话起的名字（DSH 里是 displayTitle ?? title）
+           · createdAt  会话创建时间
+         两者都可能缺失（title 需要用户改过标题；createdAt 需要库里有消息），
+         所以逐级回落：title → createdAt 的日期部分 → 最后才是 id 本身。
+         **回落链本身是诚实的**：拿不到可读信息时显示 id，而不是编一个。 */
+      const label = function(id){
+        const m = (ledger && ledger.meta && ledger.meta[id]) || {};
+        if(typeof m.title === 'string' && m.title){ return m.title; }
+        if(typeof m.createdAt === 'string' && m.createdAt){
+          const d = m.createdAt.slice(0, 10);
+          if(d){ return d; }
+        }
+        return id;
+      };
+      /* 入口 desc 写的是「查看 / **取消归档**」——而原先这里**只查看**：
+         `POST /session/archive/restore` 从来没被调用过
+         （后端 5 个 /session/* 端点，前端只用了 1 个）。
+         **又是一条"文案承诺了没做的事"的入口**（与问题 14 同一类）。
+         现在真的去恢复：列表按 archived_at 升序，取末尾最新的那一条。
+         restore 的参数键与 archive 相同，都是 sessionId；返回 {ok:true}。 */
+      const latest = archivedIds[archivedIds.length - 1];
+      const latestLabel = label(latest);
+      toast('已归档 ' + archivedIds.length + ' 条（最近：' + latestLabel + '），正在取消归档…');
+      return call('/session/archive/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: latest }),
+      }).then(function(res){
+        if(res && res.ok === false){
+          throw new Error((res.error && (res.error.message || res.error)) || '取消归档被拒绝');
+        }
+        toast('已取消归档「' + latestLabel + '」');
+        renderFnSections();
+      }).catch(function(err){
+        /* 失败要说清是哪一条失败了，否则用户不知道数据有没有被动过 */
+        toast('取消归档「' + latestLabel + '」失败：' + err.message);
+        renderFnSections();
+      });
+    }).catch(function(err){
+      archivedIds = null;
+      toast('归档集合读取失败：' + err.message);
+    });
+    return;
+  }
+}
+
+/* 桌宠：走 preload 暴露的 window.alice.pet
+   方法名逐字核对过 electron/preload.cjs（getStatus / setEnabled）；
+   通道由 main.cjs 从 petController.commands 动态注册，getStatus() 返回
+   { enabled, active_pet, pet_size }。 */
+function petBridge(){
+  const b = window.alice;
+  return b && b.pet && typeof b.pet.getStatus === 'function' ? b.pet : null;
+}
+function togglePetFromPanel(){
+  const pet = petBridge();
+  if(!pet){ toast('桌宠不可用：当前外壳没有暴露 pet 接口'); return; }
+  pet.getStatus().then(function(st){
+    const next = !(st && st.enabled);
+    return pet.setEnabled(next).then(function(after){
+      petVisible = !!(after && after.enabled !== undefined ? after.enabled : next);
+      toast(petVisible ? '桌宠已显示' : '桌宠已隐藏');
+      renderFnSections();
+    });
+  }).catch(function(err){
+    toast('桌宠操作失败：' + err.message);
+  });
+}
+
+function bindFnSkills(){
+  fnSkillBody.querySelectorAll('[data-fn-skill]').forEach(el => {
+    const fill = () => {
+      composerInput.value = '/' + el.dataset.fnSkill + ' ';
+      renderSlash(); composerInput.focus();
+      el.classList.add('fn-flash');
+      setTimeout(() => el.classList.remove('fn-flash'), 320);
+    };
+    el.addEventListener('click', fill);
+    el.addEventListener('keydown', e => {
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault(); fill();
+    });
+  });
+}
+
+/* ── 移植能力区（2026-10-01）────────────────────────────────────────────
+   四项从 DSH 移植的能力里，能在浮框里给出**真实入口**的有三处：
+     ① 远程机器（SSH）  → 列出机器并**真的连接第一台**（machine.list → machine.connect），
+                           把真实结果或真实失败原因报出来。
+                           原先只报台数，而 desc 却写着「连接 / 隧道 / TOFU」——
+                           **文案承诺的三件事一件都没做**，后端 13 个方法只调了 1 个。
+                           新增/删除机器走 machine.save / machine.remove（键是 machineId，
+                           档案在 payload.row，密钥在 payload.secrets）——本区仍未提供，
+                           所以 desc 也相应收窄，不再声称做了没做的事。
+     ② 已归档会话       → 归档集合，可取消归档
+     ③ 桌宠             → 显示或隐藏
+   第四项「原生右键菜单」是**交互方式**而非页面，没有可点的入口
+   （它挂在会话行/链接/输入框的 contextmenu 上），所以这里不列——
+   列一个点了没反应的入口比不列更糟。 */
+const PORT_ROWS = [
+  /* desc 是**给用户看的承诺**，必须与点击后真的发生的事一致。
+     改这几个字之前先问：点下去到底会不会发生这件事？ */
+  { id:'ssh',    label:'远程机器（SSH）', desc:'列出并连接',  kind:'panel' },
+  { id:'archive',label:'已归档会话',      desc:'查看 / 取消归档', kind:'panel' },
+  { id:'pet',    label:'桌宠',            desc:'显示 / 隐藏',     kind:'toggle' },
+];
+
+function fnPortHTML(){
+  const sshCount = (typeof sshMachines !== 'undefined' && Array.isArray(sshMachines)) ? sshMachines.length : null;
+  const archCount = (typeof archivedIds !== 'undefined' && Array.isArray(archivedIds)) ? archivedIds.length : null;
+  return '<div class="fn-head"><span>移植能力</span>' + fnCountHTML(PORT_ROWS.length) + '</div>' +
+    PORT_ROWS.map(r => {
+      const badge = r.id === 'ssh' ? (sshCount === null ? '—' : sshCount + ' 台')
+                  : r.id === 'archive' ? (archCount === null ? '—' : archCount + ' 条')
+                  : (petVisible ? '已显示' : '已隐藏');
+      return `<div class="fn-row" data-fn-port="${r.id}" role="button" tabindex="0" title="${esc(r.desc)}">
+        <span class="fn-status"><span class="fn-dot" aria-hidden="true"></span><span data-role="port-state">${esc(badge)}</span></span>
+        <span class="fn-prompt">${esc(r.label)}</span>
+        <span class="fn-meta"><span class="fn-desc">${esc(r.desc)}</span><span class="fn-fill">打开</span></span>
+      </div>`;
+    }).join('');
+}
+
+function bindFnPorts(){
+  fnPortBody.querySelectorAll('[data-fn-port]').forEach(el => {
+    const go = () => {
+      const id = el.dataset.fnPort;
+      el.classList.add('fn-flash');
+      setTimeout(() => el.classList.remove('fn-flash'), 320);
+      if (id === 'ssh') return openPortPanel('ssh');
+      if (id === 'archive') return openPortPanel('archive');
+      if (id === 'pet') return togglePetFromPanel();
+    };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', e => {
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault(); go();
+    });
+  });
+}
+function renderFnSections(){
+  const st = fnSchedBody.scrollTop, sk = fnSkillBody.scrollTop, sp = fnPortBody ? fnPortBody.scrollTop : 0;
+  fnSchedBody.innerHTML = fnSchedHTML();
+  fnSkillBody.innerHTML = fnSkillHTML();
+  if (fnPortBody) { fnPortBody.innerHTML = fnPortHTML(); fnPortBody.scrollTop = sp; }
+  fnSchedBody.scrollTop = st; fnSkillBody.scrollTop = sk;   /* 重建后恢复滚动位置 */
+  bindFnSkills();
+  bindFnPorts();
+}
+/* 每秒只改「相对时间」文本与逾期状态，不重建 DOM —— 滚动位置、悬停态、焦点都不会被冲掉 */
+function tickFnSections(){
+  const now = Date.now();
+  fnSchedBody.querySelectorAll('[data-rel-ts]').forEach(el => {
+    const ts = Number(el.dataset.relTs), od = ts <= now;
+    el.textContent = relativeLabel(ts, now);
+    el.classList.toggle('od', od);
+    const row = el.closest('.fn-row');
+    if(!row) return;
+    row.classList.toggle('overdue', od);
+    const s = row.querySelector('[data-role="state"]');
+    if(s) s.textContent = od ? '已逾期' : '等待中';
+  });
+}
+renderFnSections();
+setInterval(tickFnSections, 1000);
+
+/* ============================================================
+   启动
+   ============================================================ */
+render();
+renderSkills();
+</script>
+<script>
+/* Harness screen interactions: kept isolated from the original demo layer. */
+(function(){
+  var API_BASE = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'http://127.0.0.1:3721';
+  var skills = [];
+  var skillFallback = [
+    {id:'graphify', name:'graphify', desc:'Use for any question about a codebase, its architecture, file relationships, or project content...', source:'fallback', relativeDir:'', on:true},
+    {id:'hatch-pet', name:'hatch-pet', desc:'Create, repair, validate, visually QA and package Codex-compatible v2 animated pets from character...', source:'fallback', relativeDir:'', on:true},
+    {id:'prompt-optimizer', name:'prompt-optimizer', desc:'系统化诊断、改写并优化已有 LLM 提示词。当现有 prompt 效果不佳、输出不稳定、想提升准确率/成本...', source:'fallback', relativeDir:'', on:true}
+  ];
+  function apiFetch(path, options){
+    return fetch(API_BASE + path, Object.assign({credentials:'same-origin', headers:{'Accept':'application/json'}}, options || {})).then(function(res){
+      return res.json().catch(function(){return {ok:false,error:'invalid json'}}).then(function(body){
+        if (!res.ok || body.ok === false) throw new Error(body.error || ('HTTP '+res.status));
+        return body;
+      });
+    });
+  }
+  /* 2026-09-30 修复静默不落库：apiFetch 定义在**本 IIFE 的闭包**里，第一个 IIFE 的
+     renameSession / deleteSession 却用 `typeof apiFetch === 'function'` 做守卫——而
+     `typeof` 对未声明变量恒为 'undefined'（不抛错），所以那个落库分支**从来没执行过**：
+     改完只动内存 + toast「已重命名」，一刷新就还原。这里把唯一的 apiFetch 挂到明确的
+     全局通道上，第一个 IIFE 通过该通道调用（守卫也改成对通道求值，不再裸引用标识符）。 */
+  window.__blmApi = window.__blmApi || {};
+  window.__blmApi.fetch = apiFetch;
+  function normalizeSkill(raw){
+    return {
+      id:String(raw.id || raw.name || ''),
+      name:String(raw.name || raw.id || '未命名技能'),
+      desc:String(raw.description || raw.desc || '无描述'),
+      source:String(raw.source || 'user'),
+      relativeDir:String(raw.relativeDir || ''),
+      on:raw.enabled !== false
+    };
+  }
+  function loadSkillsFromHost(showMessage){
+    return apiFetch('/workspace/skills').then(function(body){
+      skills=(body.skills || []).map(normalizeSkill);
+      renderSkills();
+      if(showMessage) showToast('已从宿主加载 '+skills.length+' 个技能');
+      return skills;
+    }).catch(function(err){
+      if(!skills.length) skills=skillFallback.slice();
+      renderSkills();
+      if(showMessage) showToast('技能接口不可用，列表为离线兜底目录（非真实技能）');
+      console.warn('[workspace] skills load failed', err);
+      return skills;
+    });
+  }
+  /* ══ 2026-09-25 追加（用户要求）：工作区会话接入真实数据 ══
+     数据源：GET /workspace/conversations（本体真实会话记录，返回 {conversations, sessionMeta}；顶层 /conversations 是主界面聊天史接口，返回裸数组，别混用）。
+     映射：渠道为一组工作区（TUI/API 合并为「本地会话」，WECHAT→微信，其余按渠道名），
+     组内按自然日切成会话条目；标题=当日第一条用户消息，摘要=当日最后一条消息，
+     updatedAt=最后消息时间，open_question→「等待回答」角标。
+     接口失败时不塞任何假数据：只提示「会话接口不可用」并保留当前列表（空列表就是空列表）。 */
+  function loadRealSessions(){
+    return apiFetch('/workspace/conversations?limit=300').then(function(body){
+      var rows = Array.isArray(body) ? body : (body.conversations || []);
+      var chanLabel = { WECHAT:'微信', WECHAT_CLAWBOT:'微信', WECOM:'企业微信', FEISHU:'飞书', DISCORD:'Discord', '语音识别':'语音' };
+      var wsMap = {}, sessMap = {};
+      rows.forEach(function(r){
+        var raw = String(r.channel || 'TUI').toUpperCase();
+        var local = (raw === 'TUI' || raw === 'API');
+        var ch = local ? 'LOCAL' : raw;
+        var ts = Date.parse(r.timestamp) || Date.now();
+        var d = new Date(ts);
+        var dayKey = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        var wsId = 'ch-' + ch;
+        if(!wsMap[wsId]) wsMap[wsId] = { id:wsId, label: local ? '本地会话' : (chanLabel[ch] || ch), cwd:'', createdAt:ts };
+        if(ts < wsMap[wsId].createdAt) wsMap[wsId].createdAt = ts;
+        var sid = wsId + '-' + dayKey;
+        if(!sessMap[sid]) sessMap[sid] = { id:sid, ws:wsId, title:'', updatedAt:ts, pending:null, snippet:'', _firstUser:'', _last:'', _messages:[], _real:true, _ch:ch, _day:dayKey };
+        var s = sessMap[sid];
+        if(ts >= s.updatedAt) s.updatedAt = ts;
+        var text = String(r.content || '').replace(/\s+/g,' ').trim();
+        if(r.role !== 'jarvis' && !s._firstUser && text) s._firstUser = text;
+        if(text) s._last = text;
+        if(Number(r.open_question) === 1) s.pending = 'question';
+        s._messages.push({ role:String(r.role || ''), text:String(r.content || '').trim(), ts:ts });
+      });
+      var meta = (body && typeof body === 'object' && body.sessionMeta) ? body.sessionMeta : {};
+      var realSessions = Object.keys(sessMap).map(function(k){ return sessMap[k]; });
+      realSessions.forEach(function(s){
+        s.title = s._firstUser.slice(0,26) || (new Date(s.updatedAt).toLocaleDateString() + ' 会话');
+        var m = meta[s.id];
+        if(m && m.title) s.title = String(m.title).slice(0,120);
+        s.snippet = s._last.slice(0,60);
+        s.messages = s._messages || [];
+        delete s._firstUser; delete s._last; delete s._messages;
+      });
+      realSessions.sort(function(a,b){ return b.updatedAt - a.updatedAt; });
+      var realWorkspaces = Object.keys(wsMap).map(function(k){ return wsMap[k]; });
+      realWorkspaces.sort(function(a,b){ return b.createdAt - a.createdAt; });
+      /* 2026-10-01：排除已归档会话。归档现在是**后端持久**状态
+         （POST /session/archive 落 archived_sessions 表），所以刷新后必须仍然隐藏——
+         否则「已归档（已写入后端）」的提示与实际行为不符：用户一刷新会话又回来了。
+         这正是 2026-09-30 那轮要修的「界面说的和实际不一致」。
+         归档集合取不到时**不阻塞列表**：照常显示（宁可多显示，也不因为一个附加请求
+         失败就让整个会话列表空掉）；此时归档项会重新出现，属于已知降级。 */
+      var realSessionsVisible = realSessions;
+      if(realSessions.length){
+        sessions = realSessions;
+        workspaces = realWorkspaces;
+        state.selected = realSessions[0].id;
+        state.expanded = {};
+        state.expandedAll = {};
+        render();
+      } else {
+        showToast('暂无真实会话记录');
+      }
+      return apiFetch('/session/archive').then(function(ledger){
+        var archived = (ledger && Array.isArray(ledger.archivedSessionIds)) ? ledger.archivedSessionIds : [];
+        if(!archived.length) return realSessions;
+        var drop = {};
+        archived.forEach(function(k){ drop[String(k)] = true; });
+        realSessionsVisible = realSessions.filter(function(s){ return !drop[s.id]; });
+        if(realSessionsVisible.length === realSessions.length) return realSessions;
+        sessions = realSessionsVisible;
+        if(!sessions.some(function(s){ return s.id === state.selected; })){
+          state.selected = sessions.length ? sessions[0].id : null;
+        }
+        state.expanded = {};
+        state.expandedAll = {};
+        render();
+        return realSessionsVisible;
+      }).catch(function(err){
+        /* 归档集合拿不到：如实降级，不静默 */
+        console.warn('[workspace] archive ledger load failed', err);
+        return realSessions;
+      });
+    }).catch(function(err){
+      console.warn('[workspace] conversations load failed', err);
+      showToast('会话接口不可用：' + err.message);
+      return null;
+    });
+  }
+  var skillGrid = document.getElementById('hSkillGrid');
+  var skillSearch = document.getElementById('hSkillSearch');
+  var skillCount = document.getElementById('hSkillCount');
+  var toastEl = document.getElementById('hToast');
+  var toastTimer;
+  function escHtml(v){return String(v).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
+  function showToast(message){toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastEl.classList.remove('show')},1900)}
+  function renderSkills(){
+    var query=(skillSearch.value||'').trim().toLowerCase();
+    var list=skills.filter(function(s){return !query || (s.name+' '+s.desc+' '+s.source).toLowerCase().indexOf(query)>-1});
+    skillCount.textContent=list.length+'/'+skills.length;
+    skillGrid.innerHTML=list.length ? list.map(function(s){
+      var offLine=s.source==='fallback'; var sourceLabel=s.source==='bundled'?'内置':s.source==='sandbox'?'沙箱':s.source==='user'?'用户':s.source==='fallback'?'离线兜底':'本地';
+      return '<article class="h-skill-card" data-skill-name="'+escHtml(s.name)+'"><div class="h-skill-top"><div class="h-skill-name">'+escHtml(s.name)+'</div><span class="h-skill-badge'+(offLine?' fallback':'')+'">'+sourceLabel+'</span></div><div class="h-skill-desc">'+escHtml(s.desc)+'</div><div class="h-skill-foot"><span class="h-toggle static-indicator '+(s.on?'on':'')+'" role="img" aria-label="'+escHtml(s.name)+(s.on?'：已启用':'：未启用')+'"><i></i></span><span class="h-toggle-note">'+((s.source==='fallback')?'离线兜底目录（非真实技能）':(s.on?'已启用（只读）':'未启用（只读）'))+'</span><button type="button" class="h-open" data-skill-open="'+escHtml(s.id)+'">打开目录</button></div></article>';
+    }).join('') : '<div class="h-empty" style="grid-column:1/-1;padding:32px 0">没有匹配的技能。</div>';
+  }
+  function notifyHost(page){
+    /* 被宿主内嵌时，把「点了哪一页」告诉宿主，由宿主决定主界面哪块框跟着换 */
+    try {
+      if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'bl-page', page: page }, '*');
+    } catch (err) { /* 独立打开时忽略 */ }
+  }
+  function switchPage(page, silent){
+    document.querySelectorAll('.h-nav button[data-page]').forEach(function(btn){btn.classList.toggle('active',btn.dataset.page===page)});
+    document.getElementById('hPageSkills').classList.toggle('active',page==='skills');
+    document.getElementById('hPageMcp').classList.toggle('active',page==='mcp');
+    document.getElementById('hPageSchedule').classList.toggle('active',page==='schedule');
+    if (!silent) notifyHost(page);
+  }
+  document.querySelectorAll('.h-nav button[data-page]').forEach(function(btn){btn.addEventListener('click',function(){switchPage(btn.dataset.page)})});
+  /* 宿主把本页内嵌进主界面右框时，用 #page=schedule / #page=skills 指定先显示哪一页；
+     右框换页时只改 hash（不整页重载），所以同时监听 hashchange 跟着切。 */
+  (function(){
+    var apply = function(){
+      var m = /(?:^|[#&?])page=(schedule|skills|mcp)/.exec(window.location.hash || '');
+      if (m) switchPage(m[1], true);
+    };
+    apply();
+    window.addEventListener('hashchange', apply);
+  })();
+  /* 2026-09-30 诚实化（同上）：这条监听在嵌入形态（#navonly/#bare）里会被
+     文件末尾那两块分别 cloneNode 换掉，只在单独打开本页时生效。文案与
+     newSessionIn 的提示保持一致，不再说「已创建新会话」这种落不了库的成功语。 */
+  document.getElementById('hNewSession').addEventListener('click',function(){showToast('已新建未保存的会话草稿：未写入数据库，刷新后消失')});
+  /* 2026-09-30 诚实化：宿主 Brain UI 的设置面板在主窗口里，但它只对外开了
+     bl-open-schedules 一条通道（见 workspace-panel.js：只转发 'bl-open-schedules'，
+     没有 bl-open-settings）。设置面板的入口在 app.js 里只作为 initChat({openSettings})
+     的参数闭包存在（app.js:3934），没有挂到 window 上，iframe 拿不到。
+     所以这里如实告知不可用，不再说「设置面板即将打开」。 */
+  document.getElementById('hSettings').addEventListener('click',function(){showToast('设置面板在主窗口里，浮窗没有入口（窗内不支持打开）')});
+  /* 账户：本产品是本地单用户，没有登录/账户体系，「当前账户：本地用户」是实情。 */
+  document.getElementById('hProfile').addEventListener('click',function(){showToast('本地单用户模式：无账户体系，本项目目录下运行')});
+  var mcpServers = [];
+  var mcpList=document.getElementById('hMcpList'), mcpSearch=document.getElementById('hMcpSearch');
+  function normalizeMcp(server, status){
+    var s=server||{}; var st=status||{}; var state=String(st.status||'');
+    return Object.assign({},s,{
+      id:String(s.id||st.id||''), name:String(s.name||st.name||s.id||'未命名服务器'),
+      desc:String(s.description||s.desc||'MCP 服务器'), transport:String(s.transport||'stdio'),
+      enabled:s.enabled!==false, on:s.enabled!==false && state!=='disabled',
+      status:state || (s.enabled===false?'disabled':'disconnected'),
+      toolCount:Number(st.toolCount||st.loadedToolCount||0),
+      error:String(st.error||''), builtIn:st.builtIn===true
+    });
+  }
+  function mergeMcpResponse(body){
+    var configured=(body.mcp&&body.mcp.servers)||[]; var statuses=((body.status&&body.status.servers)||[]);
+    var byId={}; statuses.forEach(function(st){byId[st.id]=st});
+    mcpServers=configured.map(function(s){return normalizeMcp(s,byId[s.id])});
+    statuses.filter(function(st){return st.builtIn && !mcpServers.some(function(s){return s.id===st.id})}).forEach(function(st){mcpServers.push(normalizeMcp(st,st))});
+  }
+  function loadMcpFromHost(showMessage){
+    return apiFetch('/settings/mcp').then(function(body){mergeMcpResponse(body);renderMcp();if(showMessage)showToast('已同步 '+mcpServers.length+' 个 MCP 服务器');return mcpServers}).catch(function(err){renderMcp();if(showMessage)showToast('MCP 接口不可用');console.warn('[workspace] mcp load failed',err);return mcpServers});
+  }
+  function mcpPayload(){
+    return mcpServers.filter(function(s){return !s.builtIn}).map(function(s){
+      return {id:s.id,name:s.name,enabled:s.enabled!==false,transport:s.transport||'stdio',command:s.command||'',args:Array.isArray(s.args)?s.args:[],cwd:s.cwd||'',envKeys:Array.isArray(s.envKeys)?s.envKeys:[],env:s.env||{},allowedTools:Array.isArray(s.allowedTools)?s.allowedTools:[],allowAutonomousReadOnly:s.allowAutonomousReadOnly===true,timeoutMs:Number(s.timeoutMs)||60000};
+    });
+  }
+  function saveMcpConfig(next, successMessage){
+    var previous=mcpServers.slice(); mcpServers=next; renderMcp();
+    return apiFetch('/settings/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({servers:mcpPayload()})}).then(function(body){mergeMcpResponse(body);renderMcp();if(successMessage)showToast(successMessage);return body}).catch(function(err){mcpServers=previous;renderMcp();showToast('MCP 保存失败：'+err.message);return null});
+  }
+  function renderMcp(){
+    var q=(mcpSearch.value||'').trim().toLowerCase();
+    var list=mcpServers.filter(function(s){return !q || (s.name+' '+s.desc+' '+s.transport+' '+s.status+' '+s.error).toLowerCase().indexOf(q)>-1});
+    document.getElementById('hMcpCount').textContent=mcpServers.length;
+    document.getElementById('hMcpTools').textContent=mcpServers.reduce(function(n,s){return n+(Number(s.toolCount)||0)},0);
+    mcpList.innerHTML=list.length ? list.map(function(s){
+      var connected=s.status==='connected'; var state=s.status==='disabled'?'已停用':connected?'已连接':s.status==='idle'?'待连接':s.error?'错误':'未连接';
+      var toggleable=!s.builtIn;
+      return '<article class="h-mcp-card" data-mcp-id="'+escHtml(s.id)+'"><div class="h-mcp-main"><div class="h-mcp-title"><span class="h-mcp-dot '+(connected?'on':'')+'"></span><strong>'+escHtml(s.name)+'</strong><span class="h-mcp-state">'+state+'</span></div><div class="h-mcp-desc">'+escHtml(s.desc)+(s.error?' · '+escHtml(s.error):'')+'</div><div class="h-mcp-meta"><span>'+escHtml(s.transport.toUpperCase())+'</span><span>·</span><span>'+String(Number(s.toolCount)||0)+' 个工具</span></div></div>'+(toggleable?'<button type="button" class="h-toggle '+(s.enabled!==false?'on':'')+'" data-mcp-toggle="'+escHtml(s.id)+'" aria-label="'+(s.enabled!==false?'停用':'启用')+' '+escHtml(s.name)+'"><i></i></button>':'<span class="h-mcp-built-in">内置</span>')+'</article>';
+    }).join('') : '<div class="h-empty">没有匹配的 MCP 服务器。</div>';
+  }
+  document.getElementById('hMcpTab').addEventListener('click',function(){switchPage('mcp')});
+  mcpSearch.addEventListener('input',renderMcp);
+  document.getElementById('hMcpRefresh').addEventListener('click',function(){loadMcpFromHost(true)});
+  document.getElementById('hMcpAdd').addEventListener('click',function(){openModal('添加 MCP 服务器','按“id | 名称 | command”填写，当前后端支持 stdio。','id | 名称 | command',function(raw){var parts=raw.split('|').map(function(v){return v.trim()});if(parts.length<3||!parts[0]||!parts[2]){showToast('格式应为：id | 名称 | command');return}var next=mcpServers.filter(function(s){return !s.builtIn}).concat([{id:parts[0].toLowerCase(),name:parts[1]||parts[0],desc:'等待连接的 MCP 服务器',transport:'stdio',command:parts.slice(2).join(' | '),args:[],cwd:'',envKeys:[],env:{},allowedTools:[],enabled:true,status:'disconnected',toolCount:0}]);saveMcpConfig(next,'已添加 MCP 服务器 '+parts[1])})});
+  mcpList.addEventListener('click',function(event){var toggle=event.target.closest('[data-mcp-toggle]');if(!toggle)return;var item=mcpServers.find(function(s){return s.id===toggle.dataset.mcpToggle});if(!item)return;item.enabled=item.enabled===false;saveMcpConfig(mcpServers,(item.enabled?'已启用 ':'已停用 ')+item.name)});
+  renderMcp();
+  loadSkillsFromHost(false);
+  loadMcpFromHost(false);
+  loadRealSessions();
+  skillSearch.addEventListener('input',renderSkills);
+  document.getElementById('hRefreshSkills').addEventListener('click',function(){
+    /* 2026-09-25 接真实后端：POST /workspace/skills/refresh 重新扫描技能目录 */
+    apiFetch('/workspace/skills/refresh',{method:'POST'}).then(function(body){
+      skills = (body.skills || []).map(normalizeSkill);
+      renderSkills();
+      showToast('已重新扫描技能目录，共 ' + skills.length + ' 个技能');
+    }).catch(function(err){
+      showToast('技能刷新失败：' + err.message);
+      console.warn('[workspace] skills refresh failed', err);
+    });
+  });
+  document.getElementById('hOpenSkills').addEventListener('click',function(){
+    /* 2026-09-25 接真实后端：POST /workspace/skills/open 打开用户技能根目录 */
+    apiFetch('/workspace/skills/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({root:'user'})}).then(function(body){
+      showToast('已打开技能目录：'+body.dir);
+    }).catch(function(err){
+      showToast('打开技能目录失败：'+err.message);
+    });
+  });
+  document.getElementById('openSessDirBtn').addEventListener('click',function(){
+    /* 2026-09-25 接真实后端：POST /workspace/sessions/open 打开会话存储目录（jarvis.db 所在 data 目录） */
+    apiFetch('/workspace/sessions/open',{method:'POST'}).then(function(body){
+      showToast('已打开会话存储目录：'+body.dir);
+    }).catch(function(err){
+      showToast('打开会话目录失败：'+err.message);
+    });
+  });
+  /* 2026-09-30 诚实化：原来收完 URL 只 showToast('导入请求已提交')，**一个请求都没发**——
+     本文件里最典型的假成功。后端也没有这个能力：workspace.js 的技能相关端点只有
+     GET /workspace/skills、POST /workspace/skills/refresh、POST /workspace/skills/open
+     （api.js 注册的全部路由里没有 /skills/import|install|add），所以无从接线。
+     直接复用已有的真实动作 POST /workspace/skills/open 打开技能目录，并如实说明
+     导入仓库在当前版本不可用——不再弹一个收 URL 的框假装提交。 */
+  document.getElementById('hImportSkill').addEventListener('click',function(){
+    apiFetch('/workspace/skills/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({root:'user'})}).then(function(body){
+      showToast('当前版本不支持从仓库导入技能（后端无导入接口）；已打开技能目录：'+body.dir);
+    }).catch(function(err){
+      showToast('当前版本不支持从仓库导入技能（后端无导入接口）；打开技能目录也失败：'+err.message);
+    });
+  });
+  skillGrid.addEventListener('click',function(event){
+    /* 2026-09-30 诚实化：原来这里 `item.on = !item.on; renderSkills(); showToast('已启用/已停用 X')`
+       ——纯内存开关，刷新即还原。后端没有技能启停端点（skills/registry.js 的技能对象也不带
+      enabled 字段，技能只由磁盘上的 SKILL.md 决定存在与否），所以这个开关已从卡片上撤掉，
+      改成只读状态指示；这里保留兜底：万一日后再出现该元素，也如实说明不可持久化。 */
+    var toggle=event.target.closest('[data-skill-toggle]');
+    var open=event.target.closest('[data-skill-open]');
+    if(toggle){showToast('技能启停不可在本页保存：后端没有启用/停用接口，磁盘上的 SKILL.md 存在即启用。')}
+    if(open){
+      /* 2026-09-25 接真实后端：POST /workspace/skills/open 按技能 id 打开其所在目录 */
+      apiFetch('/workspace/skills/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:open.dataset.skillOpen})}).then(function(body){
+        showToast('已打开 '+body.dir);
+      }).catch(function(err){
+        showToast('打开目录失败：'+err.message);
+      });
+    }
+  });
+  function openModal(title,desc,placeholder,callback){
+    document.getElementById('hModalTitle').textContent=title;document.getElementById('hModalDesc').textContent=desc;document.getElementById('hModalInput').placeholder=placeholder||'';document.getElementById('hModalInput').value='';document.getElementById('hModalBackdrop').classList.add('show');document.getElementById('hModalInput').focus();
+    document.getElementById('hModalOk').onclick=function(){var value=document.getElementById('hModalInput').value.trim();if(!value){showToast('请先输入内容');return}document.getElementById('hModalBackdrop').classList.remove('show');callback(value)};
+  }
+  document.getElementById('hModalCancel').addEventListener('click',function(){document.getElementById('hModalBackdrop').classList.remove('show')});
+  document.getElementById('hModalBackdrop').addEventListener('click',function(e){if(e.target===e.currentTarget)e.currentTarget.classList.remove('show')});
+  /* 2026-09-30 诚实化：原来这里 skills.push({name,desc,on:true})——推入的对象**没有 id、没有
+     source**：徽标因此落成默认的「本地」（冒充真实技能），而 renderSkills() 又把这个空 id
+     喂给 data-skill-open → 「打开目录」会 POST 一个空 id 让后端 404。toast「已创建技能 X」
+     更是假的：技能只能来自磁盘上的 SKILL.md（见 skills/registry.js，source 由所在根决定
+     bundled/sandbox/user 三选一），后端没有任何「创建技能」端点，推内存里也刷不出真技能。
+     现在改成：问一个文件夹名 → 打开真实技能目录 → 如实说明要自己放 SKILL.md。 */
+  document.getElementById('hNewSkill').addEventListener('click',function(){
+    openModal('新建技能（在技能目录里建文件夹）','技能由磁盘上的文件夹 + SKILL.md（YAML frontmatter 里要有 name 和 description）定义，本页不能替你创建。填一个文件夹名，我会打开技能目录让你放。','技能文件夹名',function(name){
+      apiFetch('/workspace/skills/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({root:'user'})}).then(function(body){
+        var where = String(body.dir||'').replace(/[\\/]+$/,'');
+        showToast('请在 '+(where ? where + '\\' : '技能目录下 ') + name + '\\SKILL.md 里写好 name/description，再点「刷新」');
+      }).catch(function(err){
+        showToast('无法打开技能目录：'+err.message+'（技能需手动建文件夹 + SKILL.md）');
+      });
+    });
+  });
+    /* ===== 定时任务页：接**真实**接口（2026-09-29 改）
+     原来是本地状态驱动（schedTasks 是空数组，创建/删除只改内存，刷新就没了），
+     看上去能用其实什么都没落库。现在数据源是 GET /schedules，创建/删除打
+     POST /schedules 与 DELETE /schedules/:id。
+
+     一处刻意的行为改变：原来的「手动创建」只问一个**名称**——而提醒必须有调度规格
+     （什么时候触发），问个名字就"创建成功"是本文件里最假的那一段。现在它请宿主
+     打开带完整表单的提醒面板（schedules-panel.js），因为只有那里能填完一个规格。
+     那个面板没有独立导航入口：它的入口就是这里的「手动创建」和主界面的 /schedules。 */
+  var schedTasks = [], schedRuns = [], schedTab = 'active', schedQuery = '';
+  var schedPanel = document.getElementById('hSchedulePanel');
+  var taskList = document.createElement('div');
+  taskList.className = 'h-task-list';
+  schedPanel.insertBefore(taskList, schedPanel.firstChild);
+  var taskEmpty = document.getElementById('hScheduleEmpty');
+  var recoBox = schedPanel.querySelector('.h-recommend');
+  function pad2(n){ return n < 10 ? '0' + n : '' + n; }
+  function stamp(){ var d = new Date(); return pad2(d.getMonth()+1) + '月' + pad2(d.getDate()) + '日 ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  function renderTasks(){
+    var q = schedQuery.toLowerCase();
+    if (schedTab === 'history'){
+      var hit = schedRuns.filter(function(r){ return !q || String(r.name + ' ' + r.result).toLowerCase().indexOf(q) > -1; });
+      taskList.innerHTML = hit.map(function(r){
+        return '<div class="h-task-row"><div class="h-task-main"><div class="h-task-name">' + escHtml(r.name) + '</div><div class="h-task-meta">' + escHtml(r.at) + ' · ' + escHtml(r.result) + '</div></div></div>';
+      }).join('');
+      taskEmpty.style.display = hit.length ? 'none' : 'block';
+      taskEmpty.textContent = '暂无投递记录。';
+      if (recoBox) recoBox.style.display = 'none';
+      return;
+    }
+    var rows = schedTasks.filter(function(t){ return !q || (t.name + ' ' + t.cron).toLowerCase().indexOf(q) > -1; });
+    taskList.innerHTML = rows.map(function(t){
+      return '<div class="h-task-row"><div class="h-task-main"><div class="h-task-name">' + escHtml(t.name) + '</div><div class="h-task-meta">' + escHtml(t.cron) + ' · 下次 ' + escHtml(t.dueAt) + (t.timezone ? ' · ' + escHtml(t.timezone) : '') + '</div></div><button type="button" class="h-task-del" data-task-del="' + escHtml(String(t.id)) + '">删除</button></div>';
+    }).join('');
+    taskEmpty.style.display = rows.length ? 'none' : 'block';
+    taskEmpty.textContent = schedTasks.length ? '没有匹配的定时任务。' : '还没有定时任务，点击「手动创建」创建一个。';
+    if (recoBox) recoBox.style.display = q ? 'none' : 'block';
+  }
+  function loadSchedules(){
+    return apiFetch('/schedules').then(function(body){
+      schedTasks = (body.reminders || []).map(function(r){
+        return {
+          id: r.id,
+          name: r.task,
+          // 用服务端算好的描述（如「每天 09:00」），本地不自己推 cron
+          cron: r.description || 'once',
+          dueAt: r.due_at || '',
+          timezone: r.timezone || '',
+        };
+      });
+      schedRuns = (body.delivery_history || []).map(function(h){
+        return {
+          name: h.channel || '未知渠道',
+          at: h.created_at || '',
+          result: h.verified ? '已验证送达' : (h.delivered ? '已送达（未验证）' : ('未送达' + (h.error ? '：' + h.error : ''))),
+        };
+      });
+      renderTasks();
+    }).catch(function(error){
+      taskEmpty.style.display = 'block';
+      taskList.innerHTML = '';
+      taskEmpty.textContent = '加载定时任务失败：' + (error && error.message ? error.message : error);
+    });
+  }
+  function addTask(spec, okText){
+    return apiFetch('/schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(spec),
+    }).then(function(){
+      showToast(okText);
+      return loadSchedules();
+    }).catch(function(error){
+      showToast('创建失败：' + (error && error.message ? error.message : error));
+    });
+  }
+  taskList.addEventListener('click', function(event){
+    var del = event.target.closest('[data-task-del]');
+    if (!del) return;
+    var id = Number(del.dataset.taskDel);
+    if (!id) return;
+    apiFetch('/schedules/' + id, { method: 'DELETE' }).then(function(){
+      showToast('已删除定时任务');
+      return loadSchedules();
+    }).catch(function(error){
+      showToast('删除失败：' + (error && error.message ? error.message : error));
+    });
+  });
+  document.getElementById('hChatCreate').addEventListener('click', function(){ showToast('请在对话中描述要定期执行的任务') });
+  document.getElementById('hManualCreate').addEventListener('click', function(){
+    // 只问名称是填不完一个调度规格的（什么时候触发？哪个时区？），
+    // 所以这里打开真正的表单面板，而不是拿个名字假装创建成功。
+    //
+    // **必须用 postMessage 而不是本窗口的 CustomEvent**：本页跑在宿主浮框的
+    // iframe 里，在自己 window 上 dispatch 只有自己听得到，父窗口永远收不到
+    // ——那正是「点了没反应」的原因。父窗口那边（workspace-panel.js）监听 bl-open-schedules。
+    try { parent.postMessage({ type: 'bl-open-schedules' }, '*') } catch (error) { void error }
+  });
+  // 「手动创建」用 postMessage 请宿主打开提醒面板（见上）。
+  document.querySelectorAll('[data-schedule-tab]').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      schedTab = tab.dataset.scheduleTab;
+      document.querySelectorAll('[data-schedule-tab]').forEach(function(t){ t.classList.toggle('active', t === tab) });
+      renderTasks();
+    });
+  });
+  document.querySelectorAll('[data-recommend]').forEach(function(card){
+    card.addEventListener('click', function(){
+      // 推荐模板带上真正的调度规格（原来只是一句文案，点了只改内存）
+      if (card.dataset.recommend === 'weekly'){
+        addTask({ kind:'weekly', weekday:5, time:'16:00', task:'每周回顾' }, '已创建定时任务：每周回顾');
+      } else {
+        addTask({ kind:'cron', cron:'0 8 * * 1-5', task:'工作日早报' }, '已创建定时任务：工作日早报');
+      }
+    });
+  });
+  document.getElementById('hScheduleSearch').addEventListener('input', function(){ schedQuery = this.value.trim(); renderTasks(); });
+  loadSchedules();
+  /* 宿主（提醒面板）建/删了提醒之后会广播 bl-schedules-changed —— 重读一次。
+     不监听的话这里会一直显示打开本页时的旧列表，看起来就像"创建了但没落进来"。 */
+  window.addEventListener('message', function(event){
+    if (event && event.data && event.data.type === 'bl-schedules-changed') loadSchedules();
+  });
+
+  var shell=document.getElementById('harnessApp'), dragBar=shell.querySelector('.h-topbar'), dragState=null;
+  dragBar.addEventListener('pointerdown',function(event){
+    if(event.target.closest('.h-top-right')) return;
+    var rect=shell.getBoundingClientRect();
+    dragState={x:event.clientX,y:event.clientY,left:rect.left,top:rect.top};
+    shell.style.left=rect.left+'px'; shell.style.top=rect.top+'px'; shell.style.right='auto'; shell.style.bottom='auto';
+    dragBar.setPointerCapture(event.pointerId);
+  });
+  dragBar.addEventListener('pointermove',function(event){
+    if(!dragState) return;
+    var nextLeft=Math.max(8,Math.min(window.innerWidth-shell.offsetWidth-8,dragState.left+event.clientX-dragState.x));
+    var nextTop=Math.max(8,Math.min(window.innerHeight-shell.offsetHeight-8,dragState.top+event.clientY-dragState.y));
+    shell.style.left=nextLeft+'px'; shell.style.top=nextTop+'px';
+  });
+  dragBar.addEventListener('pointerup',function(){dragState=null});
+  dragBar.addEventListener('pointercancel',function(){dragState=null});
+  renderSkills();
+})();
+</script>
+<!-- 2026-09-24 用户要求：右键菜单显示到最上层。
+     根因：应用外壳 .harness-app 是 position:absolute/fixed + z-index:200 且铺满整页，
+     而 .menu/.popover 只有 z-index:80、.toast 100、.hover-card 60、.scrim 90，
+     全都被外壳那一整层盖住，右键菜单因此看不见（DOM 里有、事件也能触发，就是被压在下层）。 -->
+<style id="embed-z-top">
+  .menu             { z-index: 400 !important; }
+  .popover          { z-index: 400 !important; }
+  .hover-card       { z-index: 300 !important; }
+  .scrim            { z-index: 900 !important; }
+  .h-modal-backdrop { z-index: 900 !important; }
+  .toast,
+  .h-toast          { z-index: 1100 !important; }
+</style>
+</body>
+</html>
+
+<!-- Embed-mode override: the live shell is .harness-app (the .app/.sidebar/.main
+     block above is dead CSS, hidden by .app{display:none}). Drop its opaque
+     neutrals so the host panel colour (var(--panel)) shows through and the
+     window reads as ONE surface with the main frame. -->
+<style id="embed-panel-color-match">
+  /* 1) 底色：宿主面板色；取不到就退回本页原本的深色 #151517。
+        注意不能写成 transparent —— 透明会把背后的白底露出来，那就是“发白”的来源。 */
+  html, body { background: var(--bl-panel, #151517) !important; }
+  .harness-app, .h-stage, .h-topbar { background: transparent !important; }
+  .harness-app { border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
+
+  /* 3) 浮框左侧那一栏：照主界面 .panel 的做法，做成一块独立的「框」——
+        面板底色 + 1px 线 + 16px 圆角 + 四周留边，不再是贴边的窄条。 */
+  .h-sidebar {
+    background: var(--bl-panel, #151517) !important;
+    border: 1px solid var(--bl-line-strong, #353539) !important;
+    border-radius: 16px !important;
+    margin: 10px 0 10px 10px !important;
+  }
+
+  /* 2) 令牌映射：整页是由这套 DSH 令牌搭起来的，把承载“面/线/字”的那几个
+        指到宿主主题色上。每一项都带本页原来的深色作兜底 —— 宿主没推送时
+        保持深色，绝不会因为 var() 落空而变成白色。 */
+  :root {
+    --dsw-alias-bg-layer-1: var(--bl-panel-raised, #232324);
+    --dsw-alias-bg-layer-2: var(--bl-panel-raised, #2c2c2e);
+    --dsw-alias-bg-layer-3: var(--bl-panel-raised, #353638);
+    --dsw-specific-menu: var(--bl-panel-raised, #353638);
+    --dsw-alias-button-floating-fill: var(--bl-panel-raised, #2c2c2e);
+    --dsw-alias-button-floating-hover: var(--bl-panel-raised, #353638);
+    --dsw-alias-button-elevated-fill: var(--bl-panel-raised, #43454a);
+    --dsw-alias-tooltip-bg: var(--bl-panel-raised, #2c2c2e);
+    --dsw-alias-interactive-bg-hover-solid: var(--bl-panel-raised, #353638);
+    --dsw-alias-markdown-code-block: var(--bl-panel, #1b1b1c);
+    --dsw-alias-markdown-code-block-banner: var(--bl-panel-raised, #2c2c2e);
+    --dsw-alias-label-primary: var(--bl-ink, #f9fafb);
+    --dsw-alias-label-secondary: var(--bl-ink2, #cfd3d6);
+    --dsw-alias-label-tertiary: var(--bl-ink2, #adb2b8);
+    --dsw-alias-label-caption: var(--bl-dim, #81858c);
+    --dsw-alias-label-dimmed: var(--bl-dim, #43454a);
+    --dsw-alias-border-l1: var(--bl-line, #ffffff0f);
+    --dsw-alias-border-l2: var(--bl-line-strong, #ffffff1f);
+    --dsw-alias-border-l4: var(--bl-line-strong, #ffffff29);
+  }
+</style>
+
+<!-- Theme bridge: this document is separate, so the host's CSS theme variables
+     cannot cascade in. The host (workspace-panel.js) posts the live theme
+     colours; here we rewrite the fixed DSH dark neutrals used by the live
+     .harness-app shell into those host colours, so the panel reads as ONE
+     surface with the main frame and follows any appearance theme. -->
+<script id="embed-theme-bridge">
+(function(){
+  var VAR_MAP = {
+    '--bl-bg': '--bg0',
+    '--bl-bg-deep': '--bg-deep',
+    '--bl-panel': '--panel',
+    '--bl-panel-raised': '--panel-raised',
+    '--bl-ink': '--ink',
+    '--bl-ink2': '--ink2',
+    '--bl-dim': '--dim',
+    '--bl-line': '--line',
+    '--bl-line-strong': '--line-strong',
+    '--bl-cool': '--cool',
+    '--bl-warm': '--warm',
+    '--bl-ok': '--ok',
+    '--bl-warn': '--warn',
+    '--bl-danger': '--danger'
+  };
+
+  function channels(hex){
+    var h = hex.slice(1);
+    if (h.length === 3) h = h.charAt(0)+h.charAt(0)+h.charAt(1)+h.charAt(1)+h.charAt(2)+h.charAt(2);
+    return [parseInt(h.slice(0,2),16)/255, parseInt(h.slice(2,4),16)/255, parseInt(h.slice(4,6),16)/255];
+  }
+  function luminance(hex){
+    var c = channels(hex).map(function(v){ return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); });
+    return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+  }
+  function chroma(hex){
+    var c = channels(hex);
+    return Math.max(c[0],c[1],c[2]) - Math.min(c[0],c[1],c[2]);
+  }
+  // 把写死的 DSH 深色中性色按用途（底色/描边/文字）换成宿主主题色。
+  // 底色/描边/文字都直接取主框自己用的那几个令牌（--panel / --panel-raised /
+  // --line / --line-strong / --ink / --ink2 / --dim），也就是主框面板的同一套配方；
+  // 每个值都带上原始色作为兜底 —— 宿主变量万一没送到，页面退回原本的 DSH 配色，
+  // 不会因为 var() 失效而变成透明、发白。
+  function mapHex(hex, kind){
+    if (chroma(hex) > 0.22) return hex;   // 彩色强调色（蓝/绿/紫）保持原样
+    var l = luminance(hex);
+    var pick = function(name){ return 'var(' + name + ', ' + hex + ')'; };
+    if (kind === 'surface') {
+      if (l < 0.02) return 'transparent';
+      if (l < 0.06) return pick('--bl-panel');
+      return pick('--bl-panel-raised');
+    }
+    if (kind === 'line') {
+      if (l < 0.35) return pick('--bl-line-strong');
+      return pick('--bl-line');
+    }
+    if (l >= 0.72) return pick('--bl-ink');
+    if (l >= 0.32) return pick('--bl-ink2');
+    return pick('--bl-dim');
+  }
+  function rewrite(css){
+    return css.replace(/([-a-zA-Z]+)\s*:\s*([^;{}]+)/g, function(whole, prop, value){
+      var kind;
+      if (/^background/.test(prop)) kind = 'surface';
+      else if (/^(border|outline|box-shadow|text-shadow)/.test(prop)) kind = 'line';
+      else if (prop === 'color') kind = 'text';
+      else return whole;
+      var next = value.replace(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g, function(hex){
+        return mapHex(hex, kind);
+      });
+      return prop + ':' + next;
+    });
+  }
+
+  // 关键：html/body 绝不设透明。透明会露出宿主背后的白底，整块就是“发白”。
+  // 只让内部壳层透明，透出 body 上的宿主面板色（--bl-panel，取不到退回深色）。
+  var EXTRA = [
+    /* 壳层透明：直接露出宿主面板色，绝不设白底 */
+    '.harness-app, .h-stage, .h-topbar { background: transparent !important; }',
+    '.harness-app { color: var(--bl-ink, #f7f7f8) !important; }',
+    /* 分栏线 / 描边：跟随宿主主题线色 */
+    '.h-topbar { border-bottom-color: var(--bl-line, #303033) !important; }',
+    '.h-sidebar { border-color: var(--bl-line-strong, #353539) !important; }',
+    '.h-tabs { border-bottom-color: var(--bl-line, #303033) !important; }',
+    /* 侧栏按钮：悬停 / 选中态用宿主抬升面板色（原来是写死的深灰块） */
+    '.h-nav button:hover, .h-sidebar-bottom button:hover { background: var(--bl-panel-raised, #2d2d30) !important; }',
+    '.h-nav button.active { background: var(--bl-panel-raised, #414144) !important; }',
+    '.h-new-session { background: var(--bl-panel-raised, #4a4b50) !important; border-color: var(--bl-line-strong, #6d6e73) !important; }',
+    '.h-new-session:hover { background: var(--bl-panel-raised, #56575c) !important; }',
+    /* 卡片 / 搜索框 / 开关：剩下的灰块统一换成宿主面板色 */
+    '.h-skill-card { background: var(--bl-panel-raised, #37373a) !important; border-color: var(--bl-line-strong, #55565a) !important; }',
+    '.h-search { background: var(--bl-panel-raised, #242426) !important; border-color: var(--bl-line-strong, #45464a) !important; }',
+    '.h-toggle { background: var(--bl-line-strong, #6a6b70) !important; }',
+    '.h-primary { background: var(--bl-ink, #f0f0f2) !important; color: var(--bl-panel, #161619) !important; }',
+    /* 正文 / 次要文字统一跟随主题，深色主题下观感不变 */
+    '.h-nav button, .h-sidebar-bottom button, .h-link, .h-count, .h-nav-icon, .h-skill-name { color: var(--bl-ink, #f1f1f2) !important; }',
+    '.h-tab.active { color: var(--bl-ink, #fff) !important; border-color: var(--bl-ink, #f0f0f2) !important; }',
+    '.h-tab:hover { color: var(--bl-ink, #fff) !important; }',
+    '.h-skill-desc { color: var(--bl-ink2, #e0e1e3) !important; }',
+    '.h-tab, .h-count span, .h-refresh, .h-desc, .h-section-title .h-cap { color: var(--bl-ink2, #a9abb0) !important; }',
+    '.h-search, .h-search input::placeholder { color: var(--bl-dim, #96989e) !important; }'
+  ];
+
+  function applyTheme(vars){
+    if (!vars) return;
+    Object.keys(VAR_MAP).forEach(function(local){
+      var host = VAR_MAP[local];
+      if (vars[host]) document.documentElement.style.setProperty(local, vars[host]);
+    });
+    // 不再整表重写：只注入这层透明的壳规则，具体配色交给下面的 DSH 令牌映射。
+    var src = EXTRA.join('\n') + '\n';
+    var out = document.getElementById('bl-theme-override');
+    if (!out) {
+      out = document.createElement('style');
+      out.id = 'bl-theme-override';
+      document.head.appendChild(out);
+    }
+    out.textContent = src;
+    document.documentElement.setAttribute('data-bl-themed', '1');
+  }
+
+  window.addEventListener('message', function(event){
+    var data = event && event.data;
+    if (!data || data.type !== 'bl-theme' || !data.vars) return;
+    try { applyTheme(data.vars); } catch (err) { /* 保持默认深色外观 */ }
+  });
+
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'bl-theme-request' }, '*');
+    }
+  } catch (err) { /* 独立打开时保持默认深色外观 */ }
+})();
+</script>
+
+<!-- 显示画布里的「另一个框」：点「扩展技能」等导航后出现在舞台(.h-stage)里的那一页，
+     不再是一块平铺的内容，而是照主界面 .panel 的做法做成独立的一块框 ——
+     面板底色 + 1px 描边 + 16px 圆角 + 四周留边，和左侧那栏同一个规格。
+     放在最后，覆盖前面所有页容器规则。 -->
+<style id="embed-stage-page-box">
+  .h-page {
+    width: auto !important;
+    height: calc(100% - 20px) !important;
+    margin: 10px !important;
+    padding: 18px 20px 22px !important;
+    box-sizing: border-box !important;
+    overflow: auto !important;
+    background: var(--bl-panel, #151517) !important;
+    border: 1px solid var(--bl-line-strong, #353539) !important;
+    border-radius: 16px !important;
+  }
+</style>
+
+<!-- 2026-09-23 定稿（用户要求）：「只留两个框和框里的内容，其他去掉」。
+     浮框内只保留两块框 ——
+       1) 左边那块窄框 .h-sidebar（按认知界面同尺寸占住左侧那一格）；
+       2) 显示画布里的那块框 .h-page（点定时任务 / 扩展技能时切换的那一页）。
+     其余壳层 chrome 整条去掉：顶栏 .h-topbar 是重复的一层（浮框自身已有标题栏
+     和关闭按钮），去掉后壳层只剩这两块框，不再有额外的横条与外壳。
+     放在文件最后，覆盖前面所有相关规则。 -->
+<style id="embed-two-boxes-only">
+  .h-topbar { display: none !important; }
+  .harness-app { border: 0 !important; box-shadow: none !important; }
+</style>
+
+<!-- 2026-09-23 追加（用户要求）：
+     ① 替换认知界面的那块窄框里只留四项 —— 新建会话 / 定时任务 / 扩展技能 / 工作区，
+        其余（品牌行、设置与账户、右侧舞台）全部去掉；
+     ② 点「定时任务 / 扩展技能」展开的右边那个框里去掉这块窄框，只留页面内容。
+     两种形态用 hash 开关：浮框内嵌 #navonly=1，右框内嵌 #page=xxx&bare=1。 -->
+<style id="embed-frame-modes">
+  /* ① 窄框模式：只留 新建会话 / 定时任务 / 扩展技能 / 工作区 */
+  html.embed-nav-only .h-brand,
+  html.embed-nav-only .h-sidebar-bottom,
+  html.embed-nav-only .h-stage { display: none !important; }
+  html.embed-nav-only .harness-app {
+    position: absolute !important; inset: 0 !important;
+    width: 100% !important; height: 100% !important; overflow: visible !important;
+  }
+  html.embed-nav-only .h-workspace { flex: 1; min-height: 0; overflow: auto; }
+  html.embed-nav-only .h-sidebar {
+    width: calc(100% - 20px) !important;
+    margin: 10px !important;
+    overflow: auto !important;
+  }
+
+  /* ② 纯页面模式：右框里去掉窄框，只留页面内容 */
+  html.embed-bare .h-sidebar { display: none !important; }
+  html.embed-bare .harness-app {
+    position: absolute !important; inset: 0 !important;
+    width: 100% !important; height: 100% !important; overflow: visible !important;
+  }
+  html.embed-bare .h-workspace { height: 100%; }
+</style>
+<script id="embed-frame-modes-js">
+(function(){
+  var root = document.documentElement;
+  function apply(){
+    var h = window.location.hash || '';
+    root.classList.toggle('embed-nav-only', /navonly=1/.test(h));
+    root.classList.toggle('embed-bare', /bare=1/.test(h));
+  }
+  apply();
+  window.addEventListener('hashchange', apply);
+})();
+</script>
+
+<!-- 2026-09-23 追加（用户要求）：工作区框上边框两角补齐圆边。
+     这两个框本身已经是 16px 圆角，但上沿两角会被外层（宿主浮框 12px 的圆角、
+     或 800px 以下媒体查询里的覆盖）切掉一块，看起来就是上边框圆角不完整。
+     这里把两个框的四角显式钉成 16px（上沿两角单独再写一遍，防止被后面的规则覆盖），
+     并让框自己裁切内容，上沿就不会再出现直角。 -->
+<style id="embed-box-round-corners">
+  html .h-sidebar,
+  html .h-page {
+    border-radius: 16px !important;
+    border-top-left-radius: 16px !important;
+    border-top-right-radius: 16px !important;
+    border-bottom-left-radius: 16px !important;
+    border-bottom-right-radius: 16px !important;
+  }
+  /* 框自己裁掉内部直角内容，圆角才不会被里面的方块压平。
+     2026-09-28 修复（用户报：技能面板没有下滑条、内容超出面板、技能说明看不见）：
+     这里原来把 .h-page 也写成 overflow:hidden，它的优先级高于上面那条
+     .h-page{overflow:auto}，等于把整页的滚动条一并关掉了 —— 技能一多，
+     下面的卡片被直接裁掉，既滚不动也看不到下半截（说明文字就在被裁的那半截里）。
+     现在只让窄框继续裁切，页面框改成纵向可滚；滚动容器同样按圆角裁切，
+     圆角不会被里面的方块压平。 */
+  html.embed-nav-only .h-sidebar { overflow: hidden !important; }
+  html .h-page {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,.18) transparent;
+  }
+  html .h-page::-webkit-scrollbar { width: 8px; }
+  html .h-page::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 4px; }
+  html .h-page::-webkit-scrollbar-track { background: transparent; }
+  /* 窄框里的滚动交给内层列表，不靠框自身滚动 */
+  html.embed-nav-only .h-sidebar .list-area { overflow-y: auto !important; }
+</style>
+
+<!-- 2026-09-24 追加（用户要求）：定时任务页剩下的灰块换成宿主主题色。
+     主题桥的 EXTRA 只盖住了技能页那几个控件（.h-skill-card / .h-search / .h-toggle），
+     定时任务页的搜索框、描边按钮、推荐卡片、标签底线、弹窗与提示条仍是写死的灰，
+     这里逐条指到 --bl-* 令牌；每一项都带原来的灰做兜底，宿主没推主题时观感不变。 -->
+<style id="embed-schedule-theme">
+  .h-schedule-search{background:var(--bl-panel-raised,#242426)!important;border-color:var(--bl-line-strong,#4b4c51)!important;color:var(--bl-dim,#96989e)!important}
+  .h-schedule-search input{color:var(--bl-ink,#f2f2f3)!important}
+  .h-schedule-search input::placeholder{color:var(--bl-dim,#777980)!important}
+  .h-outline{border-color:var(--bl-line-strong,#515258)!important;color:var(--bl-ink,#f2f2f3)!important}
+  .h-outline:hover{background:var(--bl-panel-raised,#252528)!important}
+  .h-schedule-tabs{border-bottom-color:var(--bl-line,#303033)!important}
+  .h-schedule-tab{color:var(--bl-ink2,#c7c8cc)!important}
+  .h-schedule-tab.active{border-color:var(--bl-ink,#eee)!important;color:var(--bl-ink,#fff)!important}
+  .h-schedule-intro,.h-empty,.h-reco-desc{color:var(--bl-ink2,#b5b7bc)!important}
+  .h-reco-card{background:var(--bl-panel-raised,#151517)!important;border-color:var(--bl-line-strong,#3d3e42)!important}
+  .h-reco-card:hover{background:var(--bl-panel-raised,#1f1f22)!important;border-color:var(--bl-line-strong,#5b5c62)!important}
+  .h-reco-name{color:var(--bl-ink,#e9e9eb)!important}
+  .h-modal{background:var(--bl-panel-raised,#2a2a2d)!important;border-color:var(--bl-line-strong,#4b4c50)!important}
+  .h-modal p{color:var(--bl-ink2,#bfc1c5)!important}
+  .h-modal input{background:var(--bl-panel,#1b1b1d)!important;border-color:var(--bl-line-strong,#55565b)!important;color:var(--bl-ink,#f7f7f8)!important}
+  .h-modal-foot button{background:var(--bl-panel-raised,#45464a)!important;color:var(--bl-ink,#f4f4f5)!important}
+  .h-modal-foot .ok{background:var(--bl-ink,#f0f0f2)!important;color:var(--bl-panel,#151517)!important}
+  .h-toast{background:var(--bl-panel-raised,#38393d)!important;color:var(--bl-ink,#f8f8f9)!important}
+  /* 定时任务行：新建/删除功能用到的行样式，同样跟随主题 */
+  .h-task-list{display:block}
+  .h-task-row{display:flex;align-items:center;gap:12px;padding:9px 12px;margin-bottom:9px;border:1px solid var(--bl-line-strong,#3d3e42);border-radius:8px;background:var(--bl-panel-raised,#1c1c1e)}
+  .h-task-main{min-width:0;flex:1}
+  .h-task-name{color:var(--bl-ink,#e9e9eb);font-size:13px;line-height:18px}
+  .h-task-meta{color:var(--bl-ink2,#afb1b6);font-size:12px;line-height:17px;margin-top:2px}
+  .h-task-del{flex:none;height:26px;padding:0 10px;border:1px solid var(--bl-line-strong,#515258);border-radius:13px;background:transparent;color:var(--bl-ink2,#d7d7da);font:inherit;font-size:12px;cursor:pointer}
+  .h-task-del:hover{background:var(--bl-panel-raised,#252528);color:var(--bl-ink,#fff)}
+</style>
+
+<!-- 2026-09-24 追加（用户要求）：「工作区」与「新建会话」接入真实动作。
+     原来窄框里这两项只是摆设：
+       · 「工作区」只有静态两行，点了没反应；
+       · 「新建会话」只弹一句「已创建新会话」，没有真的建出会话。
+     这里做两件事：
+       1) 在舞台里建一块工作区页 #hPageWorkspace，把演示层那套已经接好线的工作区列表
+          （.ws-root：#listArea 渲染、搜索会话、新建工作区、右键菜单、拖拽排序）整体搬进去；
+       2) 窄框里的「工作区」区头 / 行 → 切到工作区页，并通知宿主把右边大框换成工作区页；
+          「新建会话」→ 触发列表里真正的新建会话按钮（#listArea [data-create]），
+          真的插一条会话进列表并选中，然后打开工作区页让人看得见。
+     本块自包含：不依赖演示层内部函数是否落在全局作用域。 -->
+<style id="embed-workspace-page">
+  #hPageWorkspace { display: none; }
+  #hPageWorkspace.active { display: block; }
+  #hPageWorkspace .ws-root {
+    height: 100%; min-height: 0; margin: 0; padding: 0; border: 0;
+    display: flex; flex-direction: column;
+  }
+  #hPageWorkspace .list-area { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+</style>
+<script id="embed-workspace-wiring">
+(function () {
+  var stage = document.querySelector('.h-stage')
+  if (!stage) return
+  var embedded = /navonly=1|bare=1/.test(window.location.hash || '')
+
+  /* ---- 1) 工作区页：把已经接好线的工作区列表搬进来 ---- */
+  var page = document.getElementById('hPageWorkspace')
+  if (!page) {
+    page = document.createElement('section')
+    page.className = 'h-page'
+    page.id = 'hPageWorkspace'
+    stage.appendChild(page)
+  }
+  var wsRoot = document.querySelector('.ws-root')
+  if (wsRoot && embedded && wsRoot.parentNode !== page) page.appendChild(wsRoot)
+
+  /* 2026-09-30 死代码清理：原来这里还有 notifyHost()/openWorkspace()，只被下面
+     第 2 步那段（已删）调用，调用点消失后一并删除。activateWorkspace 仍在用。 */
+  function activateWorkspace() {
+    var all = document.querySelectorAll('.h-page')
+    for (var i = 0; i < all.length; i++) {
+      all[i].classList.toggle('active', all[i].id === 'hPageWorkspace')
+    }
+    var navs = document.querySelectorAll('.h-nav button[data-page]')
+    for (var j = 0; j < navs.length; j++) {
+      navs[j].classList.toggle('active', navs[j].dataset.page === 'workspace')
+    }
+  }
+
+  /* 2026-09-30 死代码清理：原第 2 步在这里绑定 .h-workspaces .h-workspace-head /
+     .h-workspace-row 的点击（打开工作区页）——本文件 HTML 里从来没有这两个类名的节点，
+     querySelectorAll 恒为 0 个，整段绑定从未生效。工作区页的入口是 .h-nav 的
+     「工作区」按钮（见文件末尾 embed-nav-workspace-js）与 #page=workspace，
+     与这里无关，故整段删除，连带删掉只服务它的 .h-workspaces 系列 CSS。 */
+
+  /* ---- 3) 「新建会话」：建一条未持久化的会话草稿，再打开工作区页 ---- */
+  var newBtn = document.getElementById('hNewSession')
+  if (newBtn) {
+    /* 换掉原来那份只弹提示的按钮，连同它的监听一起丢掉 */
+    var fresh = newBtn.cloneNode(true)
+    newBtn.parentNode.replaceChild(fresh, newBtn)
+    fresh.addEventListener('click', function () {
+      var made = false
+      var trigger = document.querySelector('#listArea [data-create]')
+      if (trigger) { trigger.click(); made = true }
+      if (!made) {
+        var area = document.getElementById('listArea')
+        if (area) {
+          area.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 120 }))
+          var items = document.querySelectorAll('.menu-item, .pop-item, .ctx-item')
+          for (var i = 0; i < items.length; i++) {
+            if (/新建会话/.test(items[i].textContent || '')) { items[i].click(); made = true; break }
+          }
+        }
+      }
+      /* 2026-09-30：原来调用 openWorkspace()，而那段只服务 .h-workspaces 死分支，
+         已随死代码一并删除。这里改成与 embed-inline-dock-js 相同的收尾——窄框形态
+         把工作区页就地展开；右框/独立形态由前面的 activateWorkspace 让它可见。 */
+      activateWorkspace()
+      var dock = document.getElementById('hInlineDock')
+      if (dock && page) { if (page.parentNode !== dock) dock.appendChild(page); dock.classList.add('open') }
+      return made
+    })
+  }
+
+  /* ---- 4) 右框用 #page=workspace 打开时，直接落到工作区页 ---- */
+  function applyHash() {
+    var m = /(?:^|[#&?])page=(schedule|skills|workspace)/.exec(window.location.hash || '')
+    if (!m) return
+    if (m[1] === 'workspace') activateWorkspace()
+    else page.classList.remove('active')
+  }
+  applyHash()
+  window.addEventListener('hashchange', applyHash)
+})();
+</script>
+
+<!-- 2026-09-24 追加（用户要求）：「新建会话」不再占用右边大框，直接显示在窄框下方的工作区里。
+     原来点「新建会话」会先建一条会话，然后把主界面右边那块大框（#chat-area）整体换成工作区页，
+     窄框里反而什么都看不见。现在改成：只在窄框内部、四项导航下方就地显示工作区页，
+     宿主大框完全不动（不向宿主发 bl-page）。
+     做法：① 窄框形态（navonly）的侧栏里加一块停靠区 .h-inline-dock；
+          ② 点「新建会话」→ 建会话 → 把工作区页 #hPageWorkspace 搬进停靠区并显示。
+     右框形态（bare）与单独打开本页时行为不变，仍走原来的宿主换框。 -->
+<style id="embed-inline-dock">
+  html.embed-nav-only .h-inline-dock {
+    display: none;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--bl-line, #303033);
+    overflow: auto;
+  }
+  html.embed-nav-only .h-inline-dock.open { display: block; }
+  html.embed-nav-only .h-inline-dock .h-page {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+</style>
+<script id="embed-inline-dock-js">
+(function () {
+  var navonly = /navonly=1/.test(window.location.hash || '')
+  if (!navonly) return
+  var sidebar = document.querySelector('.h-sidebar')
+  var page = document.getElementById('hPageWorkspace')
+  var newBtn = document.getElementById('hNewSession')
+  if (!sidebar || !page || !newBtn) return
+
+  var dock = document.getElementById('hInlineDock')
+  if (!dock) {
+    dock = document.createElement('div')
+    dock.className = 'h-inline-dock'
+    dock.id = 'hInlineDock'
+    sidebar.appendChild(dock)
+  }
+  function showInline() {
+    if (page.parentNode !== dock) dock.appendChild(page)
+    var all = document.querySelectorAll('.h-page')
+    for (var i = 0; i < all.length; i++) all[i].classList.toggle('active', all[i] === page)
+    dock.classList.add('open')
+  }
+  /* 换掉上一步那份「建完会话就去占大框」的监听 */
+  var fresh = newBtn.cloneNode(true)
+  newBtn.parentNode.replaceChild(fresh, newBtn)
+  fresh.addEventListener('click', function () {
+    var trigger = document.querySelector('#listArea [data-create]')
+    if (trigger) {
+      trigger.click()
+    } else {
+      var area = document.getElementById('listArea')
+      if (area) {
+        area.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 120 }))
+        var items = document.querySelectorAll('.menu-item, .pop-item, .ctx-item')
+        for (var i = 0; i < items.length; i++) {
+          if (/新建会话/.test(items[i].textContent || '')) { items[i].click(); break }
+        }
+      }
+    }
+    showInline()
+  })
+})();
+</script>
+
+<!-- 2026-09-24 追加（用户要求）：「工作区」功能接入。
+     根因：窄框四项里的「工作区」在 harness 层根本没有导航项 —— .h-nav 里只有
+     定时任务 / 扩展技能 两个 button[data-page]，工作区页 #hPageWorkspace 虽然建出来了，
+     却没有任何入口能把它点亮，所以看起来就是「工作区功能没接入」。
+     本块做三件事：
+       ① 在 .h-nav 末尾补上第三项「工作区」（data-page="workspace"）；
+       ② 点它 → 显示工作区页：窄框形态就地展开在四项导航下方（复用 #hInlineDock），
+          右框/独立形态则在舞台里激活该页，并把 page 通知宿主；
+       ③ 支持 #page=workspace 直接落到工作区页；点回定时任务/扩展技能时收起就地展开。
+     本块自包含，排在文件末尾，晚于前面各块执行。 -->
+<script id="embed-nav-workspace-js">
+(function () {
+  var nav = document.querySelector('.h-nav')
+  var page = document.getElementById('hPageWorkspace')
+  if (!nav || !page) return
+  var navonly = /navonly=1/.test(window.location.hash || '')
+  var dock = document.getElementById('hInlineDock')
+
+  /* ① 补上导航项「工作区」 */
+  var btn = nav.querySelector('button[data-page="workspace"]')
+  if (!btn) {
+    btn = document.createElement('button')
+    btn.type = 'button'
+    btn.setAttribute('data-page', 'workspace')
+    btn.innerHTML = '<span class="h-nav-icon">\u25a4</span><span class="h-nav-label">工作区</span>'
+    nav.appendChild(btn)
+  }
+
+  function showWorkspace() {
+    if (navonly && dock) {
+      if (page.parentNode !== dock) dock.appendChild(page)
+      dock.classList.add('open')
+    } else {
+      var stage = document.querySelector('.h-stage')
+      if (stage && page.parentNode !== stage) stage.appendChild(page)
+    }
+    var all = document.querySelectorAll('.h-page')
+    for (var i = 0; i < all.length; i++) all[i].classList.toggle('active', all[i] === page)
+    var navs = document.querySelectorAll('.h-nav button[data-page]')
+    for (var j = 0; j < navs.length; j++) {
+      navs[j].classList.toggle('active', navs[j].getAttribute('data-page') === 'workspace')
+    }
+    if (!navonly) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'bl-page', page: 'workspace' }, '*')
+        }
+      } catch (e) { /* 独立打开时忽略 */ }
+    }
+  }
+
+  btn.addEventListener('click', showWorkspace)
+
+  /* ② 点回别的导航项时，把就地展开的工作区收起，别让它一直压在下面 */
+  nav.addEventListener('click', function (event) {
+    var hit = event.target && event.target.closest ? event.target.closest('button[data-page]') : null
+    if (!hit || hit.getAttribute('data-page') === 'workspace') return
+    if (dock) dock.classList.remove('open')
+  })
+
+  /* ③ 宿主用 #page=workspace 打开时直接落到工作区页 */
+  function applyHash() {
+    if (/(?:^|[#&?])page=workspace/.test(window.location.hash || '')) showWorkspace()
+  }
+  applyHash()
+  window.addEventListener('hashchange', applyHash)
+})();
+</script>
+
+<!-- 2026-09-24 追加（用户要求）：「工作区」不用点按钮，浮框一打开就直接显示工作区。
+     做法：① 去掉 .h-nav 里的「工作区」导航按钮（不再需要点它）；
+          ② 窄框形态（navonly）加载完成即把工作区页 #hPageWorkspace 搬进停靠区
+             #hInlineDock 并展开 —— 等价于以前「点一下工作区」的结果。
+     只影响 navonly 窄框形态；右框（bare）与单独打开本页行为不变。 -->
+<style id="embed-workspace-default">
+  html.embed-nav-only .h-nav button[data-page="workspace"] { display: none !important; }
+  html.embed-nav-only .h-inline-dock { border-top: 0; margin-top: 8px; padding-top: 0; }
+</style>
+<script id="embed-workspace-default-js">
+(function () {
+  var navonly = /navonly=1/.test(window.location.hash || '')
+  if (!navonly) return
+
+  /* ① 去掉导航里的「工作区」按钮 */
+  var navBtn = document.querySelector('.h-nav button[data-page="workspace"]')
+  if (navBtn && navBtn.parentNode) navBtn.parentNode.removeChild(navBtn)
+
+  /* ② 打开即显示工作区页（复用停靠区，与以前点按钮的效果一致） */
+  function showWorkspace() {
+    var dock = document.getElementById('hInlineDock')
+    var page = document.getElementById('hPageWorkspace')
+    if (!dock || !page) return false
+    if (page.parentNode !== dock) dock.appendChild(page)
+    var all = document.querySelectorAll('.h-page')
+    for (var i = 0; i < all.length; i++) all[i].classList.toggle('active', all[i] === page)
+    dock.classList.add('open')
+    return true
+  }
+  showWorkspace()
+  if (document.readyState !== 'complete') window.addEventListener('load', showWorkspace)
+  setTimeout(showWorkspace, 60)
+})();
+</script>
+
+
+<!-- 2026-09-24 宿主浮框挂载修正：窄框停靠区必须建立完整的 flex 高度链，
+     否则工作区页虽已激活，内部 ws-root 仍可能没有可用高度而显示空白。 -->
+<style id="embed-workspace-host-mount">
+  html.embed-nav-only .h-inline-dock {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  html.embed-nav-only .h-inline-dock.open {
+    display: flex !important;
+  }
+  html.embed-nav-only .h-inline-dock > #hPageWorkspace {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+  }
+  html.embed-nav-only .h-inline-dock > #hPageWorkspace > .ws-root {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: hidden !important;
+  }
+  html.embed-nav-only .h-inline-dock > #hPageWorkspace > .ws-root > .list-area {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+  }
+</style>
+
+
+<!-- 2026-09-24 宿主挂载补丁：明确把已渲染的真实工作区根节点挂入窄框停靠区。 -->
+<style id="embed-workspace-mount-final">
+  html.embed-nav-only .h-sidebar { display:flex !important; flex-direction:column !important; min-height:0 !important; overflow:hidden !important; }
+  html.embed-nav-only .h-inline-dock { display:flex !important; flex:1 1 auto !important; flex-direction:column !important; min-height:0 !important; overflow:hidden !important; }
+  html.embed-nav-only .h-inline-dock > #hPageWorkspace { display:flex !important; flex:1 1 auto !important; flex-direction:column !important; min-height:0 !important; overflow:hidden !important; }
+  html.embed-nav-only .h-inline-dock > #hPageWorkspace > .ws-root { display:flex !important; flex:1 1 auto !important; flex-direction:column !important; min-height:0 !important; overflow:hidden !important; }
+</style>
+<script id="embed-workspace-mount-final-js">
+(function () {
+  if (!/navonly=1/.test(window.location.hash || '')) return
+  var sidebar = document.querySelector('.h-sidebar')
+  var dock = document.getElementById('hInlineDock')
+  var page = document.getElementById('hPageWorkspace')
+  var root = document.querySelector('.app .ws-root, .ws-root')
+  if (!sidebar || !dock || !page || !root) return
+  if (root.parentNode !== page) page.appendChild(root)
+  if (page.parentNode !== dock) dock.appendChild(page)
+  page.classList.add('active')
+  dock.classList.add('open')
+  if (typeof render === 'function') render()
+})();
+</script>
+
+<style id="embed-mcp-panel">
+  .h-mcp-summary{display:flex;gap:18px;margin:10px 0 14px;color:var(--bl-ink2,#b5b7bc);font-size:12px}
+  .h-mcp-summary b{color:var(--bl-ink,#f2f2f3);font-weight:600}
+  .h-mcp-list{display:flex;flex-direction:column;gap:8px}
+  .h-mcp-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--bl-line-strong,#3d3e42);border-radius:10px;background:var(--bl-panel-raised,#1c1c1e)}
+  .h-mcp-card:hover{background:var(--bl-panel-raised,#252528);border-color:var(--bl-line-strong,#5b5c62)}
+  .h-mcp-main{min-width:0;flex:1}
+  .h-mcp-title{display:flex;align-items:center;gap:7px;color:var(--bl-ink,#eee);font-size:14px;line-height:20px}
+  .h-mcp-state{color:var(--bl-ink2,#aeb0b6);font-size:11px;font-weight:400}
+  .h-mcp-dot{width:7px;height:7px;border-radius:50%;background:var(--bl-dim,#65676b);flex:none}
+  .h-mcp-dot.on{background:var(--bl-ok,#69c58b)}
+  .h-mcp-desc{margin-top:3px;color:var(--bl-ink2,#c3c5ca);font-size:12px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .h-mcp-meta{display:flex;gap:6px;margin-top:5px;color:var(--bl-dim,#85878d);font-size:11px;line-height:16px}
+  .h-mcp-card .h-toggle{flex:none}
+</style>
+
+<!-- 2026-09-25 追加：真实会话消息区样式（#sessionMsgBox，渲染 /conversations 聚合出的当日消息） -->
+<style id="embed-session-messages">
+  #sessionMsgBox{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-bottom:1px solid var(--bl-line,#303033)}
+  .sess-msg{max-width:86%;align-self:flex-start;border:1px solid var(--bl-line,#303033);border-radius:10px;padding:8px 10px;background:var(--bl-panel-raised,#1c1c1e)}
+  .sess-msg.mine{align-self:flex-end;background:rgba(103,158,254,.12);border-color:rgba(103,158,254,.35)}
+  .sess-msg-head{display:flex;justify-content:space-between;gap:10px;color:var(--bl-dim,#85878d);font-size:11px;margin-bottom:4px}
+  .sess-msg-text{color:var(--bl-ink,#f2f2f3);font-size:13px;line-height:19px;white-space:pre-wrap;word-break:break-word}
+  .sess-msg-empty{color:var(--bl-dim,#85878d);font-size:12px;align-self:center;padding:18px 0}
+</style>

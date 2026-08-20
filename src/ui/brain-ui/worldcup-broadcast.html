@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<!--
+  世界杯转播风格大屏 · 高保真原型（mock 数据）
+  ─────────────────────────────────────────────
+  参考：用户提供的 FIFA World Cup 2026 转播 dashboard 截图
+  假设：
+  - 1920×1080 设计尺寸，JS 整体缩放适配窗口（转播大屏场景，观看距离 1-3m）
+  - 国旗用 flagcdn.com 真实旗帜（Windows 下 emoji 旗帜渲染为字母，不可用）
+  - mock 数据采用参考图中的淘汰赛阶段叙事（阿根廷 2:1 法国 67' 为焦点赛）
+  - 奖杯：Wikimedia 真实奖杯图 + CSS 金色光晕；加载失败回退为金色 🏆 字符
+  - 体育场氛围：CSS 灯光渐变 + 透视草坪，不用假照片
+  数据接入：所有 mock 集中在 <script> 的 DATA 常量，后续可替换为 /worldcup 接口
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>FIFA World Cup 2026 · 赛况大屏（mock）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #05071f;
+    --bg-1: #0a0e35;
+    --bg-2: #141052;
+    --card: rgba(13, 20, 64, 0.72);
+    --card-deep: rgba(8, 12, 44, 0.85);
+    --neon: #2e7fff;
+    --neon-soft: rgba(46, 127, 255, 0.35);
+    --neon-line: rgba(64, 140, 255, 0.45);
+    --ink: #eaf2ff;
+    --ink-2: #9fb4e0;
+    --dim: #5a6ba0;
+    --live: #e8273c;
+    --live-glow: rgba(232, 39, 60, 0.55);
+    --gold: #f0c75e;
+    --gold-deep: #c79a2e;
+    --num: 'Oswald', 'Noto Sans SC', sans-serif;
+    --cn: 'Noto Sans SC', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #03040f; overflow: hidden; font-family: var(--cn); }
+
+  /* ── 1920×1080 舞台 + 自动缩放 ── */
+  #stage {
+    position: absolute; top: 0; left: 0;
+    width: 1920px; height: 1080px;
+    transform-origin: top left;
+    color: var(--ink);
+    background:
+      radial-gradient(1100px 520px at 8% -8%, rgba(110, 60, 220, 0.28), transparent 60%),
+      radial-gradient(1100px 520px at 95% -5%, rgba(60, 90, 240, 0.30), transparent 60%),
+      radial-gradient(1400px 700px at 50% 118%, rgba(40, 90, 230, 0.25), transparent 65%),
+      linear-gradient(160deg, var(--bg-1) 0%, var(--bg-0) 45%, var(--bg-2) 100%);
+    display: flex; flex-direction: column;
+  }
+  /* 对角光束 */
+  #stage::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(115deg, transparent 42%, rgba(120, 80, 255, 0.10) 50%, transparent 58%),
+      linear-gradient(245deg, transparent 40%, rgba(46, 127, 255, 0.08) 50%, transparent 60%);
+  }
+
+  /* ── 顶栏 ── */
+  .top {
+    height: 118px; flex: none;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 36px;
+  }
+  .top-spacer { width: 360px; }
+  .masthead { display: flex; align-items: center; gap: 22px; }
+  .trophy-img { height: 86px; filter: drop-shadow(0 0 18px rgba(240, 199, 94, 0.55)); }
+  .trophy-fallback { font-size: 64px; filter: drop-shadow(0 0 16px rgba(240,199,94,.6)); display: none; }
+  .masthead-text { text-align: center; }
+  .masthead-en {
+    font-family: var(--num); font-size: 52px; font-weight: 700; letter-spacing: 0.04em;
+    background: linear-gradient(180deg, #ffffff 30%, #b9ccf5 70%, #8fa9e8);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 28px rgba(120, 160, 255, 0.25);
+  }
+  .masthead-en sup { font-size: 16px; color: #b9ccf5; -webkit-text-fill-color: #b9ccf5; }
+  .masthead-cn { font-size: 17px; letter-spacing: 0.55em; color: var(--ink-2); margin-top: 2px; text-indent: 0.55em; }
+  .top-right { width: 360px; text-align: right; }
+  .top-date { font-size: 16px; color: var(--ink-2); }
+  .top-clock { font-family: var(--num); font-size: 38px; font-weight: 600; letter-spacing: 0.06em; line-height: 1.15; }
+  .top-venue { font-size: 13px; color: var(--dim); letter-spacing: 0.12em; }
+
+  /* ── 主体三柱 ── */
+  .main {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 360px 1fr 452px; gap: 20px;
+    padding: 0 28px;
+  }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--neon-line);
+    border-radius: 14px;
+    box-shadow: 0 0 0 1px rgba(20, 40, 110, 0.5), 0 0 26px rgba(40, 90, 230, 0.18), inset 0 0 40px rgba(20, 50, 160, 0.10);
+    backdrop-filter: blur(4px);
+  }
+  .panel-title {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px 10px; font-size: 21px; font-weight: 900; letter-spacing: 0.08em;
+  }
+
+  /* ── 左柱：正在进行 ── */
+  .col-live { display: flex; flex-direction: column; padding-bottom: 14px; }
+  .live-badge {
+    font-family: var(--num); font-size: 14px; font-weight: 700; letter-spacing: 0.18em;
+    color: #fff; background: var(--live); border-radius: 4px; padding: 2px 8px;
+    box-shadow: 0 0 14px var(--live-glow);
+    animation: live-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes live-pulse { 50% { box-shadow: 0 0 4px var(--live-glow); opacity: .85; } }
+  .live-cards { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 4px 14px 0; }
+  .live-card {
+    flex: 1; border: 1px solid var(--neon-line); border-radius: 12px;
+    background: linear-gradient(180deg, rgba(20, 32, 90, 0.55), rgba(10, 16, 56, 0.85));
+    box-shadow: inset 0 0 30px rgba(30, 70, 200, 0.12);
+    display: flex; flex-direction: column; padding: 12px 16px 10px;
+  }
+  .live-half {
+    align-self: center; font-size: 14px; color: var(--ink-2);
+    border: 1px solid var(--neon-line); border-radius: 20px; padding: 2px 16px;
+    background: rgba(20, 40, 120, 0.45);
+  }
+  .live-half b { color: var(--gold); font-family: var(--num); margin-left: 6px; }
+  .live-row { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 2px 2px; }
+  .live-team { width: 86px; text-align: center; }
+  .flag { border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.12); }
+  .live-team .flag { width: 64px; height: 43px; object-fit: cover; }
+  .live-team-cn { font-size: 17px; font-weight: 700; margin-top: 6px; }
+  .live-team-en { font-family: var(--num); font-size: 12px; color: var(--dim); letter-spacing: 0.1em; }
+  .live-score { font-family: var(--num); font-size: 52px; font-weight: 700; letter-spacing: 0.04em; text-shadow: 0 0 18px rgba(140, 180, 255, 0.35); white-space: nowrap; }
+  .live-score i { font-style: normal; color: var(--dim); font-size: 38px; margin: 0 4px; }
+  .live-venue { text-align: center; font-size: 12.5px; color: var(--dim); padding-top: 2px; }
+
+  /* ── 中柱 ── */
+  .col-center { display: flex; flex-direction: column; gap: 18px; min-height: 0; }
+  .hero { flex: 1.35; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; padding: 18px 30px 12px; }
+  /* 体育场氛围：看台光晕 + 透视草坪 */
+  .hero::before {
+    content: ''; position: absolute; inset: auto -10% -34% -10%; height: 70%;
+    background:
+      radial-gradient(58% 92% at 50% 100%, rgba(34, 160, 90, 0.55) 0%, rgba(24, 120, 80, 0.35) 38%, transparent 62%),
+      radial-gradient(90% 100% at 50% 110%, rgba(40, 90, 230, 0.35), transparent 70%);
+    pointer-events: none;
+  }
+  .hero::after {
+    content: ''; position: absolute; left: 50%; bottom: -6%; width: 560px; height: 200px;
+    transform: translateX(-50%) perspective(420px) rotateX(58deg);
+    background:
+      linear-gradient(90deg, transparent 49.2%, rgba(255,255,255,.35) 49.8%, rgba(255,255,255,.35) 50.2%, transparent 50.8%),
+      radial-gradient(circle at 50% 50%, transparent 58px, rgba(255,255,255,.30) 59px, rgba(255,255,255,.30) 61px, transparent 62px),
+      repeating-linear-gradient(90deg, #1f9e57 0 56px, #18874a 56px 112px);
+    border: 2px solid rgba(255,255,255,.30); border-bottom: none; border-radius: 6px 6px 0 0;
+    opacity: .8; pointer-events: none;
+  }
+  .stage-banner {
+    font-size: 20px; font-weight: 900; letter-spacing: 0.2em; color: #dfeaff; text-indent: 0.2em;
+    background: linear-gradient(180deg, #2557d8, #16308f);
+    border: 1px solid var(--neon-line); border-radius: 6px;
+    padding: 7px 46px; position: relative; z-index: 2;
+    clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%);
+    box-shadow: 0 0 22px rgba(46, 110, 255, 0.45);
+  }
+  .hero-row { display: flex; align-items: flex-start; justify-content: center; gap: 54px; margin-top: 26px; position: relative; z-index: 2; width: 100%; }
+  .hero-team { width: 250px; text-align: center; }
+  .hero-team .flag { width: 188px; height: 126px; object-fit: cover; border-radius: 8px; }
+  .hero-team-cn { font-size: 33px; font-weight: 900; margin-top: 16px; letter-spacing: 0.1em; }
+  .hero-team-en { font-family: var(--num); font-size: 16px; color: var(--ink-2); letter-spacing: 0.22em; margin-top: 2px; }
+  .hero-mid { display: flex; flex-direction: column; align-items: center; min-width: 320px; }
+  .hero-score { font-family: var(--num); font-size: 148px; font-weight: 700; line-height: 0.95; letter-spacing: 0.02em; text-shadow: 0 0 44px rgba(150, 190, 255, 0.45); white-space: nowrap; }
+  .hero-score i { font-style: normal; font-size: 110px; color: #8fa9e8; margin: 0 6px; }
+  .hero-clock {
+    margin-top: 14px; font-family: var(--num); font-size: 30px; font-weight: 600; letter-spacing: 0.1em;
+    border: 1px solid var(--neon-line); border-radius: 8px; padding: 3px 26px;
+    background: rgba(12, 22, 70, 0.8); box-shadow: 0 0 16px rgba(46, 110, 255, 0.3);
+  }
+  .hero-period { margin-top: 8px; font-size: 16px; color: var(--ink-2); letter-spacing: 0.3em; text-indent: 0.3em; }
+  .hero-scorers { display: flex; justify-content: space-between; width: 100%; padding: 18px 26px 0; position: relative; z-index: 2; }
+  .scorer-col { display: flex; flex-direction: column; gap: 8px; }
+  .scorer-col.right { align-items: flex-end; }
+  .scorer { font-size: 17px; color: #d6e4ff; display: flex; align-items: center; gap: 9px; }
+  .scorer .ball { width: 19px; height: 19px; border-radius: 50%; flex: none;
+    background: radial-gradient(circle at 35% 32%, #fff 0 28%, #cfd8ea 32% 55%, #6f7d99 60% 100%);
+    box-shadow: 0 0 6px rgba(255,255,255,.4); position: relative; }
+  .scorer .ball::after { content: ''; position: absolute; inset: 30%; background: #2a3550; clip-path: polygon(50% 0, 100% 38%, 81% 100%, 19% 100%, 0 38%); }
+  .scorer b { font-family: var(--num); color: var(--gold); font-weight: 600; }
+
+  /* ── 晋级之路 ── */
+  .bracket-panel { flex: 1; display: flex; flex-direction: column; padding-bottom: 12px; }
+  .bracket-title { justify-content: center; font-size: 19px; letter-spacing: 0.4em; text-indent: 0.4em; padding-bottom: 4px; }
+  .bracket { flex: 1; display: grid; grid-template-columns: 1fr 116px 1.1fr 116px 1fr; align-items: center; padding: 0 20px 6px; gap: 6px; }
+  .br-col { display: flex; flex-direction: column; gap: 9px; }
+  .br-col-label { font-size: 12px; color: var(--dim); letter-spacing: 0.2em; text-align: center; margin-bottom: 2px; }
+  .br-match { border: 1px solid rgba(64, 140, 255, 0.3); border-radius: 8px; background: rgba(10, 18, 58, 0.8); padding: 5px 9px; display: flex; flex-direction: column; gap: 3px; }
+  .br-match.win { border-color: var(--gold-deep); box-shadow: 0 0 12px rgba(240, 199, 94, 0.22); }
+  .br-line { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+  .br-line .flag { width: 22px; height: 15px; object-fit: cover; }
+  .br-line .name { flex: 1; white-space: nowrap; overflow: hidden; }
+  .br-line .pts { font-family: var(--num); font-weight: 600; color: var(--ink-2); }
+  .br-line.adv .pts, .br-line.adv .name { color: var(--gold); font-weight: 700; }
+  .br-mid-col { display: flex; flex-direction: column; gap: 26px; }
+  .br-tbd { border: 1px dashed rgba(120, 150, 220, 0.45); border-radius: 8px; padding: 7px 10px; display: flex; flex-direction: column; gap: 7px; background: rgba(12, 18, 52, 0.5); }
+  .br-tbd .br-line { color: var(--dim); font-size: 12.5px; }
+  .br-final { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .br-final .trophy-img { height: 118px; }
+  .br-final-label { font-size: 22px; font-weight: 900; letter-spacing: 0.3em; text-indent: 0.3em; color: var(--gold); text-shadow: 0 0 18px rgba(240, 199, 94, 0.4); }
+  .br-final-date { font-family: var(--num); font-size: 15px; color: var(--ink-2); letter-spacing: 0.12em; }
+  .br-final-venue { font-size: 12px; color: var(--dim); letter-spacing: 0.1em; line-height: 1.5; }
+
+  /* ── 右柱：今日赛程 ── */
+  .col-sched { display: flex; flex-direction: column; padding-bottom: 12px; }
+  .sched-title .cal { width: 22px; height: 22px; border: 2px solid var(--ink-2); border-radius: 4px; position: relative; }
+  .sched-title .cal::before { content: ''; position: absolute; left: 3px; right: 3px; top: 4px; height: 2px; background: var(--ink-2); }
+  .sched-list { flex: 1; display: flex; flex-direction: column; gap: 9px; padding: 4px 14px 0; }
+  .sched-row {
+    flex: 1; display: flex; align-items: center; gap: 12px;
+    border: 1px solid rgba(64, 140, 255, 0.28); border-radius: 10px;
+    background: rgba(12, 20, 62, 0.65); padding: 0 0 0 16px; overflow: hidden;
+  }
+  .sched-row.live { border-color: rgba(232, 39, 60, 0.6); background: linear-gradient(90deg, rgba(90, 16, 30, 0.55), rgba(40, 12, 40, 0.5)); box-shadow: 0 0 14px rgba(232, 39, 60, 0.18); }
+  .sched-time { width: 64px; flex: none; }
+  .sched-time b { font-family: var(--num); font-size: 21px; font-weight: 600; display: block; }
+  .sched-time span { font-size: 11px; color: var(--dim); }
+  .sched-teams { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; font-size: 16.5px; font-weight: 500; }
+  .sched-teams .flag { width: 34px; height: 23px; object-fit: cover; }
+  .sched-teams .vs { font-family: var(--num); font-size: 12px; color: var(--dim); margin: 0 2px; }
+  .sched-status {
+    width: 96px; flex: none; align-self: stretch;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    background: rgba(20, 34, 96, 0.85); border-left: 1px solid rgba(64, 140, 255, 0.25);
+  }
+  .sched-status .st { font-size: 12.5px; color: var(--ink-2); letter-spacing: 0.1em; }
+  .sched-status .sc { font-family: var(--num); font-size: 21px; font-weight: 700; }
+  .sched-row.live .sched-status { background: var(--live); border-color: transparent; }
+  .sched-row.live .sched-status .st, .sched-row.live .sched-status .mi { color: #ffd9de; }
+  .sched-row.live .sched-status .sc { color: #fff; }
+  .sched-status .mi { font-family: var(--num); font-size: 11px; color: var(--dim); }
+
+  /* ── 底栏：即将开赛 ── */
+  .bottom {
+    height: 168px; flex: none; margin: 18px 28px 22px;
+    display: flex; align-items: stretch; gap: 14px;
+  }
+  .bottom-label {
+    width: 118px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    font-size: 22px; font-weight: 900; letter-spacing: 0.1em;
+    background: var(--card); border: 1px solid var(--neon-line); border-radius: 14px;
+  }
+  .arrow {
+    width: 46px; flex: none; display: flex; align-items: center; justify-content: center;
+    font-size: 30px; color: var(--neon); cursor: pointer; user-select: none;
+    background: var(--card); border: 1px solid var(--neon-line); border-radius: 12px;
+    text-shadow: 0 0 12px var(--neon-soft); transition: background .2s;
+  }
+  .arrow:hover { background: rgba(40, 70, 180, 0.5); }
+  .upcoming { flex: 1; display: flex; gap: 14px; overflow: hidden; }
+  .up-card {
+    flex: 1; min-width: 0; border: 1px solid var(--neon-line); border-radius: 12px;
+    background: linear-gradient(180deg, rgba(18, 28, 84, 0.7), rgba(9, 14, 48, 0.9));
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: inset 0 0 24px rgba(30, 70, 200, 0.10);
+  }
+  .up-time { font-family: var(--num); font-size: 17px; font-weight: 600; color: var(--gold); letter-spacing: 0.08em; }
+  .up-row { display: flex; align-items: center; gap: 14px; }
+  .up-row .flag { width: 52px; height: 35px; object-fit: cover; }
+  .up-row .vs { font-family: var(--num); font-size: 15px; color: var(--dim); }
+  .up-names { display: flex; gap: 38px; font-size: 15.5px; font-weight: 500; }
+  .up-names span { width: 64px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+
+  <!-- ── 顶栏 ── -->
+  <div class="top">
+    <div class="top-spacer"></div>
+    <div class="masthead">
+      <img class="trophy-img" alt=""
+           src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/FIFA_World_Cup_Trophy_%28color%2C_transparent_background%29.png/240px-FIFA_World_Cup_Trophy_%28color%2C_transparent_background%29.png"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <div class="trophy-fallback">🏆</div>
+      <div class="masthead-text">
+        <div class="masthead-en">FIFA WORLD CUP 2026<sup>™</sup></div>
+        <div class="masthead-cn">2026 FIFA 世界杯™</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <div class="top-date" id="top-date">--</div>
+      <div class="top-clock" id="top-clock">--:--:--</div>
+      <div class="top-venue">美国·纽约&nbsp;&nbsp;METLIFE STADIUM</div>
+    </div>
+  </div>
+
+  <!-- ── 主体 ── -->
+  <div class="main">
+
+    <!-- 左柱：正在进行 -->
+    <div class="panel col-live">
+      <div class="panel-title">正在进行 <span class="live-badge">LIVE</span></div>
+      <div class="live-cards" id="live-cards"></div>
+    </div>
+
+    <!-- 中柱：焦点比赛 + 晋级之路 -->
+    <div class="col-center">
+      <div class="panel hero" id="hero"></div>
+      <div class="panel bracket-panel">
+        <div class="panel-title bracket-title">晋级之路</div>
+        <div class="bracket" id="bracket"></div>
+      </div>
+    </div>
+
+    <!-- 右柱：今日赛程 -->
+    <div class="panel col-sched">
+      <div class="panel-title sched-title"><span class="cal"></span> 今日赛程</div>
+      <div class="sched-list" id="sched-list"></div>
+    </div>
+
+  </div>
+
+  <!-- ── 底栏：即将开赛 ── -->
+  <div class="bottom">
+    <div class="bottom-label">即将开赛</div>
+    <div class="arrow" id="up-prev">‹</div>
+    <div class="upcoming" id="upcoming"></div>
+    <div class="arrow" id="up-next">›</div>
+  </div>
+
+</div>
+
+<script>
+// ═══ mock 数据（后续替换为 /worldcup 接口数据） ═══════════════════════════════
+
+const FLAG = (code) => `https://flagcdn.com/w160/${code}.png`;
+const T = {
+  阿根廷: { en: 'ARG', full: 'ARGENTINA', code: 'ar' },
+  法国:   { en: 'FRA', full: 'FRANCE', code: 'fr' },
+  巴西:   { en: 'BRA', full: 'BRAZIL', code: 'br' },
+  德国:   { en: 'GER', full: 'GERMANY', code: 'de' },
+  西班牙: { en: 'ESP', full: 'SPAIN', code: 'es' },
+  英格兰: { en: 'ENG', full: 'ENGLAND', code: 'gb-eng' },
+  葡萄牙: { en: 'POR', full: 'PORTUGAL', code: 'pt' },
+  瑞士:   { en: 'SUI', full: 'SWITZERLAND', code: 'ch' },
+  荷兰:   { en: 'NED', full: 'NETHERLANDS', code: 'nl' },
+  美国:   { en: 'USA', full: 'USA', code: 'us' },
+  比利时: { en: 'BEL', full: 'BELGIUM', code: 'be' },
+  意大利: { en: 'ITA', full: 'ITALY', code: 'it' },
+  克罗地亚: { en: 'CRO', full: 'CROATIA', code: 'hr' },
+  丹麦:   { en: 'DEN', full: 'DENMARK', code: 'dk' },
+  日本:   { en: 'JPN', full: 'JAPAN', code: 'jp' },
+  韩国:   { en: 'KOR', full: 'KOREA', code: 'kr' },
+};
+
+const DATA = {
+  live: [
+    { home: '阿根廷', away: '法国',   score: [2, 1], half: '下半场', minute: 67, venue: '卢赛尔体育场' },
+    { home: '巴西',   away: '德国',   score: [1, 0], half: '下半场', minute: 45, venue: '迈阿密花园球场' },
+    { home: '西班牙', away: '英格兰', score: [0, 0], half: '上半场', minute: 22, venue: 'AT&T体育场' },
+  ],
+  hero: {
+    stage: '淘汰赛 1/8 决赛',
+    home: '阿根廷', away: '法国', score: [2, 1],
+    clock: '67:24', period: '下半场',
+    scorersHome: [{ min: 23, name: '梅西' }, { min: 58, name: '阿尔瓦雷斯' }],
+    scorersAway: [{ min: 36, name: '姆巴佩' }],
+  },
+  bracket: {
+    leftLabel: '1/8 决赛', rightLabel: '1/8 决赛',
+    left: [
+      { a: '荷兰', as: 2, b: '美国', bs: 1, done: true },
+      { a: '阿根廷', as: 2, b: '法国', bs: 1, live: true },
+      { a: '巴西', as: 1, b: '德国', bs: 0, live: true },
+      { a: '西班牙', as: 0, b: '英格兰', bs: 0, live: true },
+    ],
+    right: [
+      { a: '葡萄牙', as: 3, b: '瑞士', bs: 0, done: true },
+      { a: '比利时', as: '-', b: '意大利', bs: '-' },
+      { a: '克罗地亚', as: '-', b: '丹麦', bs: '-' },
+      { a: '日本', as: '-', b: '韩国', bs: '-' },
+    ],
+    final: { date: '2026.07.19', city: 'NEW YORK', venue: '决赛场馆\nMETLIFE STADIUM' },
+  },
+  schedule: [
+    { time: '18:00', stage: '1/8 决赛', home: '葡萄牙', away: '瑞士',   status: 'done', score: [3, 0] },
+    { time: '18:00', stage: '1/8 决赛', home: '荷兰',   away: '美国',   status: 'done', score: [2, 1] },
+    { time: '21:00', stage: '1/8 决赛', home: '阿根廷', away: '法国',   status: 'live', score: [2, 1], minute: 67 },
+    { time: '21:00', stage: '1/8 决赛', home: '巴西',   away: '德国',   status: 'live', score: [1, 0], minute: 45 },
+    { time: '24:00', stage: '1/8 决赛', home: '西班牙', away: '英格兰', status: 'live', score: [0, 0], minute: 22 },
+    { time: '03:00', stage: '1/8 决赛', home: '比利时', away: '意大利', status: 'next' },
+    { time: '03:00', stage: '1/8 决赛', home: '克罗地亚', away: '丹麦', status: 'next' },
+    { time: '06:00', stage: '1/8 决赛', home: '日本',   away: '韩国',   status: 'next' },
+  ],
+  upcoming: [
+    { time: '06/12 20:00', home: '巴西', away: '德国' },
+    { time: '06/12 23:00', home: '日本', away: '韩国' },
+    { time: '06/13 02:00', home: '比利时', away: '意大利' },
+    { time: '06/13 20:00', home: '葡萄牙', away: '西班牙' },
+    { time: '06/13 23:00', home: '荷兰', away: '法国' },
+    { time: '06/14 02:00', home: '阿根廷', away: '英格兰' },
+  ],
+};
+
+// ═══ 渲染 ═════════════════════════════════════════════════════════════════════
+
+const $ = (id) => document.getElementById(id);
+const flagImg = (team, cls = '') => `<img class="flag ${cls}" src="${FLAG(T[team].code)}" alt="${team}">`;
+
+function renderLive() {
+  $('live-cards').innerHTML = DATA.live.map((m) => `
+    <div class="live-card">
+      <div class="live-half">${m.half} <b>${m.minute}'</b></div>
+      <div class="live-row">
+        <div class="live-team">${flagImg(m.home)}<div class="live-team-cn">${m.home}</div><div class="live-team-en">${T[m.home].en}</div></div>
+        <div class="live-score">${m.score[0]}<i>:</i>${m.score[1]}</div>
+        <div class="live-team">${flagImg(m.away)}<div class="live-team-cn">${m.away}</div><div class="live-team-en">${T[m.away].en}</div></div>
+      </div>
+      <div class="live-venue">🏟 ${m.venue}</div>
+    </div>`).join('');
+}
+
+function renderHero() {
+  const h = DATA.hero;
+  const scorer = (s) => `<div class="scorer"><span class="ball"></span><b>${s.min}'</b> ${s.name}</div>`;
+  $('hero').innerHTML = `
+    <div class="stage-banner">${h.stage}</div>
+    <div class="hero-row">
+      <div class="hero-team">${flagImg(h.home)}<div class="hero-team-cn">${h.home}</div><div class="hero-team-en">${T[h.home].full}</div></div>
+      <div class="hero-mid">
+        <div class="hero-score">${h.score[0]}<i>:</i>${h.score[1]}</div>
+        <div class="hero-clock" id="hero-clock">${h.clock}</div>
+        <div class="hero-period">${h.period}</div>
+      </div>
+      <div class="hero-team">${flagImg(h.away)}<div class="hero-team-cn">${h.away}</div><div class="hero-team-en">${T[h.away].full}</div></div>
+    </div>
+    <div class="hero-scorers">
+      <div class="scorer-col">${h.scorersHome.map(scorer).join('')}</div>
+      <div class="scorer-col right">${h.scorersAway.map(scorer).join('')}</div>
+    </div>`;
+}
+
+function renderBracket() {
+  const b = DATA.bracket;
+  const line = (name, pts, adv) => `
+    <div class="br-line ${adv ? 'adv' : ''}">${flagImg(name)}<span class="name">${name}</span><span class="pts">${pts}</span></div>`;
+  const match = (m) => {
+    const aAdv = m.done && Number(m.as) > Number(m.bs);
+    const bAdv = m.done && Number(m.bs) > Number(m.as);
+    return `<div class="br-match ${m.live ? 'win' : ''}">${line(m.a, m.as, aAdv)}${line(m.b, m.bs, bAdv)}</div>`;
+  };
+  const tbd = () => `<div class="br-tbd">
+    <div class="br-line"><span class="ball-mini"></span><span class="name">待定</span></div>
+    <div class="br-line"><span class="name">待定</span></div></div>`;
+
+  $('bracket').innerHTML = `
+    <div class="br-col"><div class="br-col-label">${b.leftLabel}</div>${b.left.map(match).join('')}</div>
+    <div class="br-mid-col"><div class="br-col-label">1/4 决赛</div>${tbd()}${tbd()}</div>
+    <div class="br-final">
+      <img class="trophy-img" alt=""
+           src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/FIFA_World_Cup_Trophy_%28color%2C_transparent_background%29.png/240px-FIFA_World_Cup_Trophy_%28color%2C_transparent_background%29.png"
+           onerror="this.outerHTML='<div class=&quot;trophy-fallback&quot; style=&quot;display:block;font-size:80px&quot;>🏆</div>'">
+      <div class="br-final-label">决赛</div>
+      <div class="br-final-date">${b.final.date}</div>
+      <div class="br-final-date">${b.final.city}</div>
+      <div class="br-final-venue">${b.final.venue.replace('\n', '<br>')}</div>
+    </div>
+    <div class="br-mid-col"><div class="br-col-label">1/4 决赛</div>${tbd()}${tbd()}</div>
+    <div class="br-col"><div class="br-col-label">${b.rightLabel}</div>${b.right.map(match).join('')}</div>`;
+}
+
+function renderSchedule() {
+  const statusCell = (m) => {
+    if (m.status === 'done') return `<div class="st">已结束</div><div class="sc">${m.score[0]} : ${m.score[1]}</div>`;
+    if (m.status === 'live') return `<div class="st">进行中</div><div class="sc">${m.score[0]} : ${m.score[1]}</div><div class="mi">${m.minute}'</div>`;
+    return `<div class="st">即将开始</div>`;
+  };
+  $('sched-list').innerHTML = DATA.schedule.map((m) => `
+    <div class="sched-row ${m.status === 'live' ? 'live' : ''}">
+      <div class="sched-time"><b>${m.time}</b><span>${m.stage}</span></div>
+      <div class="sched-teams">${flagImg(m.home)} ${m.home} <span class="vs">VS</span> ${m.away} ${flagImg(m.away)}</div>
+      <div class="sched-status">${statusCell(m)}</div>
+    </div>`).join('');
+}
+
+function renderUpcoming() {
+  $('upcoming').innerHTML = DATA.upcoming.slice(upOffset, upOffset + 6).map((m) => `
+    <div class="up-card">
+      <div class="up-time">${m.time}</div>
+      <div class="up-row">${flagImg(m.home)}<span class="vs">VS</span>${flagImg(m.away)}</div>
+      <div class="up-names"><span>${m.home}</span><span>${m.away}</span></div>
+    </div>`).join('');
+}
+
+let upOffset = 0;
+$('up-prev').addEventListener('click', () => { upOffset = Math.max(0, upOffset - 1); renderUpcoming(); });
+$('up-next').addEventListener('click', () => { upOffset = Math.min(DATA.upcoming.length - 6, upOffset + 1); renderUpcoming(); });
+
+// ═══ 时钟 + 焦点赛计时器（mock 走秒） ═══════════════════════════════════════════
+
+function tickTopClock() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const week = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  $('top-date').textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日  星期${week}`;
+  $('top-clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
+let heroSec = 67 * 60 + 24;
+function tickHeroClock() {
+  heroSec++;
+  const el = $('hero-clock');
+  if (el) el.textContent = `${Math.floor(heroSec / 60)}:${String(heroSec % 60).padStart(2, '0')}`;
+}
+
+// ═══ 1920×1080 自动缩放（letterbox 居中） ═══════════════════════════════════════
+
+function fit() {
+  const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+  const st = $('stage');
+  st.style.transform = `scale(${s})`;
+  st.style.left = `${(window.innerWidth - 1920 * s) / 2}px`;
+  st.style.top = `${(window.innerHeight - 1080 * s) / 2}px`;
+}
+window.addEventListener('resize', fit);
+
+renderLive(); renderHero(); renderBracket(); renderSchedule(); renderUpcoming();
+tickTopClock(); setInterval(tickTopClock, 1000); setInterval(tickHeroClock, 1000);
+fit();
+</script>
+
+</body>
+</html>

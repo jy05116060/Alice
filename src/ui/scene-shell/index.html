@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>scene-shell · 电影级 UI(live)</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    /* 独立页自带页面 chrome(styles.css 不再管 html/body,以便作为叠加层嵌入宿主页)。 */
+    html, body { margin: 0; height: 100%; overflow: hidden;
+      background: radial-gradient(1200px 800px at 70% -10%, #16203200 0%, #0b0e14 60%), var(--bg); }
+    /* 连接状态指示器(仅 live 用,纯调试):右下角一个小点 + 文本。 */
+    #status {
+      position: fixed; bottom: 14px; right: 16px; z-index: 100;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text-dim); font-family: ui-monospace, monospace;
+    }
+    #status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-dim); transition: background 200ms; }
+    #status[data-state="open"] .dot { background: var(--good); }
+    #status[data-state="connecting"] .dot { background: #e0b84a; }
+    #status[data-state="closed"] .dot { background: var(--danger); }
+    #empty { color: var(--text-dim); font-size: 14px; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <!-- 舞台:所有 surface 投影于此 -->
+  <main id="stage"></main>
+
+  <div id="status" data-state="connecting"><span class="dot"></span><span id="status-text">连接中…</span></div>
+
+  <script type="module">
+    // live 测试页:连接运行中的 app,把真实 scene 投影出来。
+    import { Shell } from './shell.js'
+    import { SceneClient } from './client.js'
+
+    const stage = document.getElementById('stage')
+    const status = document.getElementById('status')
+    const statusText = document.getElementById('status-text')
+
+    const shell = new Shell(stage, {
+      onIntent: (intent) => {
+        // 用户交互 → 上行给 core。shell 只显示与上报,绝不在此做业务决策。
+        console.log('[intent →]', intent)
+        client.sendIntent(intent)
+      },
+    })
+
+    const client = new SceneClient('ws://127.0.0.1:3721/scene', {
+      onScene: (scene) => shell.applyScene(scene),
+      onStatus: (state) => {
+        status.dataset.state = state
+        statusText.textContent = { connecting: '连接中…', open: '已连接', closed: '已断开 · 重连中…' }[state] || state
+      },
+    })
+
+    client.connect()
+    window.addEventListener('beforeunload', () => client.close())
+  </script>
+</body>
+</html>

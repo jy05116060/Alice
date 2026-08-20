@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>scene-shell · 离线动画演示(no server)</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    /* 独立页自带页面 chrome(styles.css 不再管 html/body,以便作为叠加层嵌入宿主页)。 */
+    html, body { margin: 0; height: 100%; overflow: hidden;
+      background: radial-gradient(1200px 800px at 70% -10%, #16203200 0%, #0b0e14 60%), var(--bg); }
+    /* 离线演示的控制条:手造 scene 直喂 applyScene,无任何 WebSocket。 */
+    #panel {
+      position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 100;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; border-radius: 12px;
+      background: rgba(20, 26, 35, 0.9); border: 1px solid var(--line);
+      backdrop-filter: blur(8px); font-size: 13px; color: var(--text-dim);
+      font-family: ui-monospace, monospace;
+    }
+    #panel button {
+      padding: 6px 12px; border-radius: 8px; cursor: pointer;
+      background: var(--surface-2); color: var(--text); border: 1px solid var(--line);
+    }
+    #panel button:hover { border-color: var(--accent); }
+    #panel button:disabled { opacity: 0.4; cursor: default; }
+    #step-label { min-width: 220px; color: var(--text); }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <button id="prev">◀</button>
+    <span id="step-label">—</span>
+    <button id="next">▶</button>
+    <button id="auto">自动播放</button>
+  </div>
+
+  <main id="stage"></main>
+
+  <script type="module">
+    // 离线演示:把一串手造的 scene 快照依次喂进 applyScene,无 server。
+    // 覆盖:挂载/enter、数据变化/morph、移除/exit、以及 choice → intent(打到 console)。
+    import { Shell } from './shell.js'
+
+    const stage = document.getElementById('stage')
+    const shell = new Shell(stage, {
+      onIntent: (intent) => {
+        // choice 点击会走到这里 —— 演示把意图打到 console(线上则是 sendIntent 上行)。
+        console.log('%c[intent]', 'color:#5b9dff;font-weight:bold', JSON.stringify(intent))
+        // 视觉反馈:在面板里短暂回显刚捕获的意图。
+        label.textContent = `intent: ${intent.name}(${JSON.stringify(intent.data)})`
+      },
+    })
+
+    // 一段脚本化的 scene 序列。每一帧是一份完整 surfaces 快照(纯投影:屏幕 = 这一帧)。
+    const S = (id, kind, data, extra = {}) => ({ id, kind, data, ...extra })
+
+    const frames = [
+      {
+        note: '① 空台',
+        surfaces: [],
+      },
+      {
+        note: '② enter:天气(ambient)+ 一段文本(inform)错峰入场',
+        surfaces: [
+          S('intro', 'text', { title: '场景投影', body: '这是 UI = f(scene) 的纯投影演示。', footnote: '无 server · 直喂 applyScene' }),
+          S('weather-bj', 'weather', { city: '北京', temp: 18, condition: '晴',
+            forecast: [{ day: '明天', low: 12, high: 22, condition: '多云' }, { day: '后天', low: 14, high: 24, condition: '晴' }] }, { intent: 'ambient' }),
+        ],
+      },
+      {
+        note: '③ morph:同 id 数据变化(温度翻动、预报刷新)+ 文本原地更新',
+        surfaces: [
+          S('intro', 'text', { title: '场景投影', body: '注意:天气卡是同一张在原地变化,不是淡出再淡入。', footnote: '同 id = 同元素' }),
+          S('weather-bj', 'weather', { city: '北京', temp: 9, condition: '小雨',
+            forecast: [{ day: '明天', low: 6, high: 13, condition: '雨' }, { day: '后天', low: 8, high: 16, condition: '多云' }] }, { intent: 'ambient' }),
+        ],
+      },
+      {
+        note: '④ enter + 排版原语:metric 装进 row 容器',
+        surfaces: [
+          S('intro', 'text', { title: '场景投影', body: '排版原语:把多个 surface 组合进 row / stack。' }),
+          S('weather-bj', 'weather', { city: '北京', temp: 9, condition: '小雨' }, { intent: 'ambient' }),
+          S('stats', 'row', { gap: 'md', children: [
+            S('m1', 'metric', { label: '今日步数', value: '8,420', unit: '步', trend: 'up' }),
+            S('m2', 'metric', { label: '心率', value: 72, unit: 'bpm', trend: 'flat' }),
+            S('m3', 'metric', { label: '睡眠', value: 6.2, unit: 'h', trend: 'down' }),
+          ] }),
+        ],
+      },
+      {
+        note: '⑤ 容器内子级 morph:row 里某个 metric 的数值原地变化',
+        surfaces: [
+          S('intro', 'text', { title: '场景投影', body: '容器里的某张卡变了 → 只有它原地 morph,容器不重建。' }),
+          S('weather-bj', 'weather', { city: '北京', temp: 9, condition: '小雨' }, { intent: 'ambient' }),
+          S('stats', 'row', { gap: 'md', children: [
+            S('m1', 'metric', { label: '今日步数', value: '11,930', unit: '步', trend: 'up' }),
+            S('m2', 'metric', { label: '心率', value: 88, unit: 'bpm', trend: 'up' }),
+            S('m3', 'metric', { label: '睡眠', value: 6.2, unit: 'h', trend: 'down' }),
+          ] }),
+        ],
+      },
+      {
+        note: '⑥ confront + choice:背景退后,请用户决策(点选项看 console)',
+        surfaces: [
+          S('weather-bj', 'weather', { city: '北京', temp: 9, condition: '小雨' }, { intent: 'ambient' }),
+          S('decision', 'choice', {
+            prompt: '现在外面在下雨,要把出门提醒推迟到雨停吗?',
+            options: [
+              { value: 'delay', label: '推迟到雨停', tone: 'primary' },
+              { value: 'now', label: '照常出门' },
+              { value: 'cancel', label: '取消提醒', tone: 'danger' },
+            ],
+          }, { intent: 'confront', focus: true }),
+        ],
+      },
+      {
+        note: '⑦ exit:choice 决策完撤场,只留 ambient 天气',
+        surfaces: [
+          S('weather-bj', 'weather', { city: '北京', temp: 11, condition: '多云转晴' }, { intent: 'ambient' }),
+        ],
+      },
+      {
+        note: '⑧ selfcheck running:同一 surface,第 1 步',
+        surfaces: [
+          S('self-check', 'selfcheck', { phase: 'running', step: 1, total: 3, name: '文件读写', icon: '📁' }),
+        ],
+      },
+      {
+        note: '⑨ selfcheck morph:第 1 步 → 第 3 步(计数/名称原地翻动,扫描条不断)',
+        surfaces: [
+          S('self-check', 'selfcheck', { phase: 'running', step: 3, total: 3, name: '视频模式', icon: '🎬' }),
+        ],
+      },
+      {
+        note: '⑩ selfcheck morph:running → done(整块交叉淡化成结果清单)',
+        surfaces: [
+          S('self-check', 'selfcheck', { phase: 'done', overall: 'degraded', results: [
+            { name: '文件读写', status: 'ok' },
+            { name: '热点面板', status: 'ok' },
+            { name: '视频模式', status: 'skipped', note: '限流' },
+          ] }),
+        ],
+      },
+      {
+        note: '⑪ awakening enter:探索发现 1/2(ambient,角落低调)',
+        surfaces: [
+          S('awakening', 'awakening', { index: 1, total: 2, title: 'Reading memories', finding: '记忆区已就绪,最近线索:用户在推进 Scene 架构迁移。', emoji: '🧠' }, { intent: 'ambient' }),
+        ],
+      },
+      {
+        note: '⑫ awakening morph:发现 1/2 → 2/2(标题/发现/进度点原地更新)',
+        surfaces: [
+          S('awakening', 'awakening', { index: 2, total: 2, title: 'Unfinished thread', finding: '一条没跟进的线:阶段4 删 ACUI 尚未开始。', emoji: '🔍' }, { intent: 'ambient' }),
+        ],
+      },
+      {
+        note: '⑬ 安全确认(confront + choice):复用 choice kind,确认/取消',
+        surfaces: [
+          S('security-confirm-demo', 'choice', {
+            prompt: '小白龙请求变更安全设置\n文件沙箱将关闭',
+            options: [
+              { value: 'confirm', label: '确认', tone: 'danger' },
+              { value: 'cancel', label: '取消' },
+            ],
+          }, { intent: 'confront', focus: true }),
+        ],
+      },
+      {
+        note: '⑭ progress enter:进度条从 0 填到 18%(长出来,不是凭空出现)',
+        surfaces: [
+          S('dl', 'progress', { label: '下载模型 deepseek-v4', value: 18, note: '2 / 11 文件' }),
+        ],
+      },
+      {
+        note: '⑮ progress morph:18% → 76%(进度条平滑推进 + 百分比翻动,同一元素在动)',
+        surfaces: [
+          S('dl', 'progress', { label: '下载模型 deepseek-v4', value: 76, note: '8 / 11 文件' }),
+        ],
+      },
+      {
+        note: '⑯ progress morph:76% → 100% done(满进度推断为 done,进度条转绿)',
+        surfaces: [
+          S('dl', 'progress', { label: '下载模型 deepseek-v4', value: 100, status: 'done', note: '11 / 11 文件 · 完成' }),
+        ],
+      },
+      {
+        note: '⑰ progress 不定量:进度未知 → 滑动条(忽略 value)',
+        surfaces: [
+          S('dl', 'progress', { label: '正在连接镜像源…', indeterminate: true, note: 'hf-mirror.com' }),
+        ],
+      },
+      {
+        note: '⑱ 全部 exit:清空舞台',
+        surfaces: [],
+      },
+    ]
+
+    let i = 0
+    const label = document.getElementById('step-label')
+    const prev = document.getElementById('prev')
+    const next = document.getElementById('next')
+    const auto = document.getElementById('auto')
+
+    function show(n) {
+      i = Math.max(0, Math.min(frames.length - 1, n))
+      const f = frames[i]
+      label.textContent = `${i + 1}/${frames.length} ${f.note}`
+      shell.applyScene({ v: 1, type: 'scene', rev: i, surfaces: f.surfaces })
+      prev.disabled = i === 0
+      next.disabled = i === frames.length - 1
+    }
+
+    prev.addEventListener('click', () => show(i - 1))
+    next.addEventListener('click', () => show(i + 1))
+
+    let timer = null
+    auto.addEventListener('click', () => {
+      if (timer) { clearInterval(timer); timer = null; auto.textContent = '自动播放'; return }
+      auto.textContent = '停止'
+      if (i >= frames.length - 1) show(0)
+      timer = setInterval(() => {
+        if (i >= frames.length - 1) { show(0) } else { show(i + 1) }
+      }, 2200)
+    })
+
+    show(0)
+  </script>
+</body>
+</html>

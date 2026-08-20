@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>爱丽丝 · 用户消息处理流程</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#161b22;
+    --panel2:#1c2430;
+    --line:#30363d;
+    --text:#e6edf3;
+    --muted:#8b949e;
+    --main:#58a6ff;     /* 主干 */
+    --branch:#d29922;   /* 分支/打断 */
+    --fast:#3fb950;     /* 快速路径 */
+    --llm:#bc8cff;      /* LLM 循环 */
+    --out:#f778ba;      /* 出站 */
+    --arrow:#3d4350;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 0% 0%, #11151c 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    overflow:hidden;
+  }
+  header{
+    padding:18px 28px 12px;
+    display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+  }
+  header h1{font-size:18px;font-weight:650;letter-spacing:.3px}
+  header .sub{color:var(--muted);font-size:13px}
+  .legend{margin-left:auto;display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+  /* 横向滚动画布 */
+  .canvas{
+    height:calc(100vh - 66px);
+    overflow-x:auto;
+    overflow-y:auto;
+    padding:0 30px 44px;
+    scroll-behavior:smooth;
+  }
+  .flow{
+    display:flex;
+    align-items:center;          /* 卡片与箭头统一垂直居中，箭头不再错位 */
+    gap:0;
+    min-width:max-content;
+    min-height:calc(100vh - 66px);
+    padding:80px 4px 26px;       /* 顶部留白给「打断回调」浮层 */
+  }
+
+  /* 阶段节点 */
+  .stage{position:relative;display:flex;align-items:center;align-self:center}
+  .card{
+    position:relative;
+    width:268px;
+    background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:14px 15px 15px;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s;
+  }
+  .card:hover{transform:translateY(-4px);box-shadow:0 14px 32px rgba(0,0,0,.5);border-color:var(--accent,#3d4654)}
+  .card .num{
+    position:absolute;top:-14px;left:14px;
+    width:28px;height:28px;border-radius:8px;
+    display:grid;place-items:center;
+    font-size:13px;font-weight:700;color:#0d1117;
+    background:var(--accent,#58a6ff);
+    box-shadow:0 3px 8px rgba(0,0,0,.4);
+  }
+  .card h3{font-size:14px;font-weight:650;margin:4px 0 3px;display:flex;align-items:center;gap:7px}
+  .card .file{font-size:11px;color:var(--muted);font-family:"SF Mono",Consolas,monospace;margin-bottom:9px;word-break:break-all}
+  .card ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+  .card li{font-size:12.3px;line-height:1.5;color:#c9d4e0;padding-left:14px;position:relative}
+  .card li::before{content:"";position:absolute;left:2px;top:7px;width:5px;height:5px;border-radius:50%;background:var(--accent,#58a6ff);opacity:.8}
+  .card li b{color:var(--text);font-weight:600}
+  .card code{font-family:"SF Mono",Consolas,monospace;font-size:11px;background:#0d1117;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:#a8c7fa}
+
+  /* accent 着色 */
+  .c-main{--accent:var(--main)}
+  .c-fast{--accent:var(--fast)}
+  .c-llm{--accent:var(--llm)}
+  .c-branch{--accent:var(--branch)}
+  .c-out{--accent:var(--out)}
+  .c-main .num,.c-fast .num,.c-llm .num,.c-branch .num,.c-out .num{background:var(--accent)}
+
+  /* 横向箭头连接 */
+  .conn{
+    width:54px;flex:0 0 54px;height:2px;background:var(--arrow);
+    position:relative;align-self:center;
+  }
+  .conn::after{
+    content:"";position:absolute;right:-1px;top:-4px;
+    border-left:9px solid var(--arrow);
+    border-top:5px solid transparent;
+    border-bottom:5px solid transparent;
+  }
+  .conn.dim{opacity:.55}
+  .conn .lbl{
+    position:absolute;top:-22px;left:50%;transform:translateX(-50%);
+    font-size:10.5px;color:var(--muted);white-space:nowrap;
+    background:var(--bg);padding:0 4px;
+  }
+
+  /* 上方分支：打断回调 */
+  .branch-box{
+    position:absolute;
+    top:-160px;left:0;width:300px;
+    background:rgba(210,153,34,.07);
+    border:1px dashed var(--branch);
+    border-radius:12px;padding:11px 13px;
+  }
+  .branch-box h4{font-size:12.5px;color:var(--branch);margin-bottom:6px;display:flex;gap:6px;align-items:center}
+  .branch-box ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+  .branch-box li{font-size:11.6px;line-height:1.45;color:#d7c79e;padding-left:12px;position:relative}
+  .branch-box li::before{content:"";position:absolute;left:2px;top:6px;width:4px;height:4px;border-radius:50%;background:var(--branch)}
+  /* 竖直虚线连到主干 */
+  .branch-link{
+    position:absolute;left:34px;top:-31px;height:31px;width:0;
+    border-left:2px dashed var(--branch);opacity:.7;
+  }
+  .branch-link::after{
+    content:"";position:absolute;bottom:-2px;left:-4px;
+    border-top:8px solid var(--branch);
+    border-left:5px solid transparent;border-right:5px solid transparent;
+  }
+
+  /* 内嵌子流程：快速路径 / 工具循环 */
+  .sub{
+    margin-top:9px;padding:9px 10px;border-radius:9px;
+    background:rgba(255,255,255,.025);border:1px solid var(--line);
+  }
+  .sub .stitle{font-size:11px;font-weight:650;color:var(--accent,#3fb950);margin-bottom:6px;letter-spacing:.2px}
+  .sub ul{gap:5px}
+  .sub li{font-size:11.5px;color:#b7c2cf}
+  .loop-badge{
+    display:inline-block;font-size:10px;color:#0d1117;background:var(--llm);
+    border-radius:5px;padding:1px 7px;font-weight:700;margin-left:6px;
+  }
+
+  footer{
+    position:fixed;bottom:0;left:0;right:0;
+    padding:7px 28px;font-size:11.5px;color:var(--muted);
+    background:rgba(13,17,23,.85);backdrop-filter:blur(6px);
+    border-top:1px solid var(--line);
+    display:flex;gap:18px;align-items:center;
+  }
+  footer b{color:var(--main)}
+  .hint{margin-left:auto;color:#5a6472}
+  ::-webkit-scrollbar{height:11px;width:11px}
+  ::-webkit-scrollbar-thumb{background:#283040;border-radius:6px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#3a455a}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<header>
+  <h1>🐎 爱丽丝 · Agent 处理用户消息流程</h1>
+  <span class="sub">从左往右 · 入站 → 主循环 → 单轮处理 → Agentic 工具循环 → 出站</span>
+  <div class="legend">
+    <span><i style="background:#58a6ff"></i>主干</span>
+    <span><i style="background:#d29922"></i>抢占/打断</span>
+    <span><i style="background:#3fb950"></i>快速路径</span>
+    <span><i style="background:#bc8cff"></i>LLM 循环</span>
+    <span><i style="background:#f778ba"></i>出站</span>
+  </div>
+</header>
+
+<div class="canvas" id="canvas">
+  <div class="flow">
+
+    <!-- ① 入口 -->
+    <div class="stage">
+      <div class="card c-main">
+        <div class="num">1</div>
+        <h3>消息进来</h3>
+        <div class="file">api.js:275 · POST /message</div>
+        <ul>
+          <li>body = <code>{ from_id, content, channel }</code></li>
+          <li>校验 content 非空</li>
+          <li>调 <b>pushMessage()</b> 入队</li>
+          <li>emit <code>message_in</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="conn"><span class="lbl">pushMessage()</span></div>
+
+    <!-- ② 入队 + 落库 -->
+    <div class="stage">
+      <!-- 上方分支：打断回调 -->
+      <div class="branch-box c-branch">
+        <h4>⚡ 抢占式打断回调 <span style="font-weight:400;color:var(--muted)">index.js:1468</span></h4>
+        <ul>
+          <li>新消息优先级更高 &amp; 正在处理</li>
+          <li>→ <b>abort()</b> 当前 LLM</li>
+          <li>→ emit <code>processing_preempted</code></li>
+          <li>→ triggerImmediateTick()（不等定时器）</li>
+        </ul>
+      </div>
+      <div class="card c-main">
+        <div class="branch-link"></div>
+        <div class="num">2</div>
+        <h3>入队 + 立即落库</h3>
+        <div class="file">queue.js:47 · pushMessage</div>
+        <ul>
+          <li>归一化 ID + <b>跨渠道身份合并</b></li>
+          <li>优先级：<code>user 100</code> / <code>bg 50</code></li>
+          <li><b>insertConversation()</b> — 一到就写 DB</li>
+          <li>同用户同渠道旧消息去重</li>
+          <li>interruptCallback(entry) ↑</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="conn"><span class="lbl">入 queue</span></div>
+
+    <!-- ④ 主循环 -->
+    <div class="stage">
+      <div class="card c-main">
+        <div class="num">3</div>
+        <h3>意识主循环</h3>
+        <div class="file">index.js:1327 · onTick</div>
+        <ul>
+          <li><code>processing</code> 锁 + 到期提醒入队</li>
+          <li>hasMessages()？</li>
+          <li>├ 有 → <b>popMessage()</b>（user 优先 bg）</li>
+          <li>└ 无 → 自主心跳 <b>L2 TICK</b></li>
+          <li>runTurnWithWatchdog（超时强 abort）</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="conn"><span class="lbl">runTurn(msg)</span></div>
+
+    <!-- ⑤ runTurn -->
+    <div class="stage">
+      <div class="card c-main" style="width:300px">
+        <div class="num">4</div>
+        <h3>单轮处理</h3>
+        <div class="file">index.js:683 · runTurn</div>
+        <ul>
+          <li>beginExecution（AbortController）</li>
+        </ul>
+        <div class="sub c-fast">
+          <div class="stitle">⚡ 快速路径（命中即跳过 LLM）</div>
+          <ul>
+            <li>a) 消息含 <b>API key</b> → 静默配置 + 删消息 → return</li>
+            <li>b) <b>天气直答</b> → return</li>
+          </ul>
+        </div>
+        <ul style="margin-top:9px">
+          <li><b>1.</b> runInjector — 记忆召回/工具/对话窗口</li>
+          <li><b>1b.</b> updateFocusFrame — 焦点栈 push/pop/refine</li>
+          <li><b>2.</b> directions 拼装（tick/实时/语音）</li>
+          <li><b>3.</b> buildContextBlock + buildLLMMessages</li>
+          <li><b>4.</b> runMemoryRefreshLoop（L1 多轮补召回）</li>
+          <li><b>5.</b> emit <code>system_prompt</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="conn"><span class="lbl">callLLM()</span></div>
+
+    <!-- ⑥ Agentic 工具循环 -->
+    <div class="stage">
+      <div class="card c-llm" style="width:312px">
+        <div class="num">5</div>
+        <h3>Agentic 工具循环 <span class="loop-badge">for round</span></h3>
+        <div class="file">llm.js:604 · callLLM</div>
+        <ul>
+          <li><b>streamOnceWithRetry</b> → 调 Anthropic 流式</li>
+          <li>onStream → emit <code>stream_chunk</code>（实时打字）</li>
+          <li>解析 toolCalls（JSON / XML 回退）</li>
+        </ul>
+        <div class="sub c-fast" style="--accent:#bc8cff">
+          <div class="stitle" style="color:#bc8cff">无工具调用</div>
+          <ul>
+            <li>该用工具没用 → missingTool nudge 重来</li>
+            <li>有正文没 send_message → final nudge 兜底</li>
+            <li>否则 → 结束循环</li>
+          </ul>
+        </div>
+        <div class="sub c-fast" style="--accent:#3fb950;margin-top:8px">
+          <div class="stitle">有工具调用 · executeTool()</div>
+          <ul>
+            <li><b>send_message</b>：重复发送拦截 → 落库 → emit <code>message</code> → 外部渠道投递 → <code>sentMessage=true</code></li>
+            <li>其他工具 → emit <code>tool_call</code></li>
+            <li>结果写回 messages → 下一 round ↺</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="conn"><span class="lbl">llmResult</span></div>
+
+    <!-- ⑦ 收尾 -->
+    <div class="stage">
+      <div class="card c-main">
+        <div class="num">6</div>
+        <h3>收尾</h3>
+        <div class="file">index.js:1129+</div>
+        <ul>
+          <li><b>被打断</b> → 丢弃部分输出，下轮从 conversationWindow 接续</li>
+          <li><b>正常</b> → finishTurn → emit <code>response</code></li>
+          <li><b>静默退场兜底</b>：末个工具≠send_message 且应回复 → fallback 投递正文</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="conn"><span class="lbl">SSE</span></div>
+
+    <!-- ⑧ 出站 -->
+    <div class="stage">
+      <div class="card c-out">
+        <div class="num">7</div>
+        <h3>出站到前端</h3>
+        <div class="file">api.js:295 · GET /events (SSE)</div>
+        <ul>
+          <li>stream_chunk / tool_call</li>
+          <li>message / response …</li>
+          <li>→ <b>ACUI / TUI</b></li>
+          <li>→ 外部社交渠道</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <span><b>关键设计</b></span>
+  <span>① 消息一到就落库（微信式）</span>
+  <span>② 双优先级队列 + 抢占打断</span>
+  <span>③ 焦点栈 = 动态上下文记忆池</span>
+  <span>④ 静默退场兜底看「最后一个」工具</span>
+  <span class="hint">← → 横向滚动查看完整流程</span>
+</footer>
+
+<script>
+  // 鼠标滚轮 → 横向滚动（更顺手地从左往右看）
+  const canvas = document.getElementById('canvas');
+  canvas.addEventListener('wheel', (e) => {
+    if (e.deltaY !== 0 && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      // 仅当横向有内容可滚时拦截
+      if (canvas.scrollWidth > canvas.clientWidth) {
+        canvas.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    }
+  }, { passive:false });
+</script>
+</body>
+</html>

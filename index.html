@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<style id="critical-first-paint">
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: #0b0b0e;
+  color-scheme: dark;
+}
+</style>
+<title>Longma · Cognitive Surface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/ui/brain-ui/styles.css">
+<script src="./src/ui/brain-ui/vendor/d3/d3.v7.min.js"></script>
+</head>
+<body>
+<script type="module" src="./src/ui/brain-ui/app.js"></script>
+<script>
+/* 头像挂件：app.js 会重建 body，静态 module 标签会被清掉导致模块不执行，
+   所以在 load 之后动态注入（运行时插入的 module 一定会执行）。
+   本机 app 在 3721 端口服务的入口就是 index.html（不是 brain-ui.html）。 */
+(function () {
+  function bootModule(src) {
+    var s = document.createElement('script');
+    s.type = 'module';
+    s.src = src;
+    document.head.appendChild(s);
+  }
+  function bootAll() {
+    bootModule('./src/ui/brain-ui/avatar-3d.js');
+    /* 输入区上方的两张卡（越权申请卡 + 提问卡），复刻 DSH 的 composer 插槽接管 */
+    bootModule('./src/ui/brain-ui/interaction-cards.js');
+  }
+  if (document.readyState === 'complete') bootAll();
+  else window.addEventListener('load', bootAll, { once: true });
+
+  /* 兜底：如果页面是在这段注入代码存在之前加载的（脚本标签从未插入或被清掉），
+     这里动态补注入一次 —— 否则会出现「挂件没跑、点云球又露出来」这种表面故障。
+     已经跑起来（window.__alicePet 存在）就什么都不做。 */
+  setInterval(function () {
+    if (window.__alicePet) return;
+    if (!document.querySelector('script[src*="avatar-3d.js"]')) bootModule('./src/ui/brain-ui/avatar-3d.js');
+    if (!document.querySelector('script[src*="interaction-cards.js"]')) bootModule('./src/ui/brain-ui/interaction-cards.js');
+  }, 4000);
+
+  /* 黑屏自愈：如果界面模块被写坏（解析失败）或加载撞上写入中间态，body 里就只剩
+     script 标签、主容器永远没有内容 —— 表现就是整屏黑。这里在启动后 45 秒内盯着
+     主容器，没渲染出来就自动刷新，最多 3 次。
+     计数存在 sessionStorage 里（跨重载有效），否则每次重载都会重置、变成无限刷新；
+     渲染成功后清零，以后真出问题还能再救。 */
+  (function () {
+    var KEY = 'alice.blackScreenReloads';
+    var tried = 0;
+    try { tried = Number(sessionStorage.getItem(KEY) || '0') || 0; } catch (e) { tried = 0; }
+    var deadline = Date.now() + 45000;
+    var timer = setInterval(function () {
+      var vp = document.querySelector('#app-viewport, main.app-viewport');
+      if (vp && vp.children.length > 0) {
+        try { sessionStorage.removeItem(KEY); } catch (e) {}
+        clearInterval(timer);
+        return;
+      }
+      if (tried >= 3 || Date.now() > deadline) { clearInterval(timer); return; }
+      tried += 1;
+      try { sessionStorage.setItem(KEY, String(tried)); } catch (e) {}
+      location.reload();
+    }, 9000);
+  })();
+})();
+</script>
+</body>
+</html>

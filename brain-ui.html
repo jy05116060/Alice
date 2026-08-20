@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<script>
+try {
+  if (new URLSearchParams(location.search).has('intro-preview')
+    || sessionStorage.getItem('alice_brain_ui_arrival_at')) {
+    document.documentElement.classList.add('brain-ui-intro-pending')
+  }
+} catch {}
+</script>
+<style id="critical-first-paint">
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: #0b0b0e;
+  color-scheme: dark;
+}
+html.brain-ui-intro-pending body > :not(#activation-intro) {
+  visibility: hidden !important;
+}
+</style>
+<title>Longma · Cognitive Surface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/ui/brain-ui/styles.css">
+<script src="/vendor/d3/d3.min.js"></script>
+</head>
+<body>
+<script type="module" src="./src/ui/brain-ui/app.js"></script>
+<script>
+/* 头像挂件：app.js 会重建 body，静态 module 标签会被清掉导致模块不执行，
+   所以在 load 之后动态注入（运行时插入的 module 一定会执行）。 */
+(function () {
+  function bootAvatar() {
+    var s = document.createElement('script');
+    s.type = 'module';
+    s.src = './src/ui/brain-ui/avatar-3d.js';
+    document.head.appendChild(s);
+  }
+  if (document.readyState === 'complete') bootAvatar();
+  else window.addEventListener('load', bootAvatar, { once: true });
+
+  /* 兜底：页面若是在这段注入代码存在之前加载的，脚本标签会一直缺失 →
+     这里动态补注入一次，避免出现「挂件没跑、点云球又露出来」。 */
+  setInterval(function () {
+    if (window.__alicePet) return;
+    if (!document.querySelector('script[src*="avatar-3d.js"]')) bootAvatar();
+  }, 4000);
+
+  /* 黑屏自愈：界面模块被写坏（解析失败）或加载撞上写入中间态时，body 里只剩 script
+     标签、主容器永远没内容 = 整屏黑。启动后 45 秒内盯着主容器，没渲染就自动刷新，
+     最多 3 次（计数存 sessionStorage，跨重载有效，否则会无限刷新）；渲染成功即清零。 */
+  (function () {
+    var KEY = 'alice.blackScreenReloads';
+    var tried = 0;
+    try { tried = Number(sessionStorage.getItem(KEY) || '0') || 0; } catch (e) { tried = 0; }
+    var deadline = Date.now() + 45000;
+    var timer = setInterval(function () {
+      var vp = document.getElementById('app-viewport');
+      if (vp && vp.children.length > 0) {
+        try { sessionStorage.removeItem(KEY); } catch (e) {}
+        clearInterval(timer);
+        return;
+      }
+      if (tried >= 3 || Date.now() > deadline) { clearInterval(timer); return; }
+      tried += 1;
+      try { sessionStorage.setItem(KEY, String(tried)); } catch (e) {}
+      location.reload();
+    }, 9000);
+  })();
+})();
+</script>
+</body>
+</html>

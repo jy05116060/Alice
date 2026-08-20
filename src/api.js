@@ -1,0 +1,486 @@
+import http from 'http'
+import https from 'https'
+import crypto from 'crypto'
+import fs from 'fs'
+import { WebSocketServer } from 'ws'
+import { handleSceneConnection, setSceneIntentHandler } from './scene/scene-server.js'
+import { sceneStore } from './scene/scene-store.js'
+import { pushMessage } from './inbound-message.js'
+import { getConfig, insertUISignal } from './db.js'
+import { emitEvent, setStickyEvent } from './events.js'
+import { getLanAccessToken, getNetworkConfig, getSecurity, getVoiceRuntimeConfig, setSecurity } from './config.js'
+import { ensureLanTlsCertificates } from './lan-access.js'
+import { createCloudASRSession } from './voice/cloud-asr.js'
+import { jsonResponse } from './api/utils.js'
+import { handleActivationRoutes } from './api/routes/activation.js'
+import { handleAdminRoutes } from './api/routes/admin.js'
+import { handleBrowserPreviewRoutes } from './api/routes/browser-preview.js'
+import { handleEmbeddingRoutes } from './api/routes/embedding.js'
+import { handleEventRoutes } from './api/routes/events.js'
+import { handleInteractionRoutes } from './api/routes/interaction.js'
+import { handleSubagentRoutes } from './api/routes/subagents.js'
+import { handleGoalRoutes } from './api/routes/goals.js'
+import { handleCompactionRoutes } from './api/routes/compaction.js'
+import { handlePlanModeRoutes } from './api/routes/plan-mode.js'
+import { handlePluginRoutes } from './api/routes/plugins.js'
+import { handleDeliverableRoutes } from './api/routes/deliverables.js'
+import { handleDesktopOpenRoutes } from './api/routes/desktop-open.js'
+import { handleGithubWebhookRoutes } from './api/routes/github.js'
+import { handleScheduleRoutes } from './api/routes/schedules.js'
+import { handleFeedbackRoutes } from './api/routes/feedback.js'
+import { handleMediaRoutes } from './api/routes/media.js'
+import { handleMapRoutes } from './api/routes/map.js'
+import { handleMemoryRoutes } from './api/routes/memory.js'
+import { handleKnowledgeRoutes } from './api/routes/knowledge.js'
+import { handleMessageRoutes } from './api/routes/message.js'
+import { handlePanelRoutes } from './api/routes/panels.js'
+import { handlePetRoutes } from './api/routes/pet.js'
+import { handleSessionArchiveRoutes } from './api/routes/session-archive.js'
+import { handleSettingsRoutes } from './api/routes/settings.js'
+import { handleSshRemoteRoutes } from './api/routes/ssh-remote.js'
+import { handleSocialRoutes } from './api/routes/social.js'
+import { handleStaticRoutes } from './api/routes/static.js'
+import { handleSystemStatusRoutes } from './api/routes/system-status.js'
+import { handleTTSRoutes } from './api/routes/tts.js'
+import { handleUsageRoutes } from './api/routes/usage.js'
+import { handleWorkspaceRoutes } from './api/routes/workspace.js'
+import { handleWorktreeRoutes } from './api/routes/worktrees.js'
+import { handleWorkflowRoutes } from './api/routes/workflow.js'
+import { startPluginHost, stopPluginHost } from './runtime/plugin-host.js'
+import {
+  attachWebSocketIdleTimeout,
+  authorizeWebSocketUpgrade,
+  isLoopbackAddress,
+  isPrivateLanAddress,
+  rejectWebSocketUpgrade,
+  selectWebSocketProtocol,
+  timingSafeTokenEqual,
+} from './api/websocket-security.js'
+
+export { emitEvent }
+
+const DEFAULT_API_HOST = '127.0.0.1'
+
+function getTlsOptions() {
+  const pfxPath = String(globalThis.process?.env?.ALICE_TLS_PFX || '').trim()
+  const certPath = String(globalThis.process?.env?.ALICE_TLS_CERT || '').trim()
+  const keyPath = String(globalThis.process?.env?.ALICE_TLS_KEY || '').trim()
+  if (pfxPath) {
+    return {
+      pfx: fs.readFileSync(pfxPath),
+      passphrase: String(globalThis.process?.env?.ALICE_TLS_PFX_PASSPHRASE || ''),
+    }
+  }
+  if (certPath && keyPath) {
+    return {
+      cert: fs.readFileSync(certPath),
+      key: fs.readFileSync(keyPath),
+    }
+  }
+  if (isLanAccessEnabled()) {
+    const files = ensureLanTlsCertificates()
+    globalThis.process.env.ALICE_TLS_CERT = files.serverCert
+    globalThis.process.env.ALICE_TLS_KEY = files.serverKey
+    globalThis.process.env.ALICE_LAN_CA_CERT = files.rootCer
+    return {
+      cert: fs.readFileSync(files.serverCert),
+      key: fs.readFileSync(files.serverKey),
+    }
+  }
+  return null
+}
+
+function getApiHost() {
+  const envHost = String(globalThis.process?.env?.ALICE_HOST || '').trim()
+  if (envHost) return envHost
+  return getNetworkConfig().allowLanAccess ? '0.0.0.0' : DEFAULT_API_HOST
+}
+
+function isLanAccessEnabled() {
+  return getNetworkConfig().allowLanAccess
+    || /^(1|true|yes|on)$/i.test(String(globalThis.process?.env?.ALICE_ALLOW_LAN || '').trim())
+}
+
+function isLoopbackRequest(req) {
+  return isLoopbackAddress(req.socket?.remoteAddress)
+}
+
+function isLanRequest(req) {
+  return isLanAccessEnabled() && isPrivateLanAddress(req.socket?.remoteAddress)
+}
+
+function isLoopbackOrigin(origin = '') {
+  if (!origin || origin === 'null') return true
+  try {
+    const parsed = new URL(origin)
+    return ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isAllowedOrigin(origin = '') {
+  if (isLoopbackOrigin(origin)) return true
+  if (!isLanAccessEnabled()) return false
+  try {
+    const parsed = new URL(origin)
+    return isPrivateLanAddress(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
+function getAuthToken() {
+  return getLanAccessToken({ ensure: isLanAccessEnabled() })
+}
+
+function hasValidAuthToken(req, url) {
+  const expected = getAuthToken()
+  if (!expected) return false
+  const header = req.headers.authorization || ''
+  const bearer = header.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  const queryToken = url.searchParams.get('token')
+  return timingSafeTokenEqual(bearer, expected) || timingSafeTokenEqual(queryToken, expected)
+}
+
+function requireLocalOrToken(req, res, url) {
+  if (isLoopbackRequest(req) || hasValidAuthToken(req, url)) return true
+  jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+  return false
+}
+
+function hasAllowedAccess(req, url) {
+  return isLoopbackRequest(req) || hasValidAuthToken(req, url) || isLanRequest(req)
+}
+
+function isSensitivePath(pathname) {
+  return pathname === '/activate'
+    || pathname === '/activate/prepare'
+    || pathname === '/settings'
+    || pathname.startsWith('/settings/')
+    || pathname.startsWith('/admin/')
+    || pathname.startsWith('/memories/')
+    || pathname.startsWith('/knowledge/')
+}
+
+function setCorsHeaders(req, res, origin) {
+  if (isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || 'null')
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+}
+
+async function dispatchHttpRoutes(req, res, url, context) {
+  if (await handleMessageRoutes(req, res, url)) return true
+  if (await handleEventRoutes(req, res, url)) return true
+  if (await handleInteractionRoutes(req, res, url)) return true
+  if (await handleSubagentRoutes(req, res, url)) return true
+  if (await handleGoalRoutes(req, res, url)) return true
+  if (await handleCompactionRoutes(req, res, url)) return true
+  if (await handlePlanModeRoutes(req, res, url)) return true
+  if (await handleDeliverableRoutes(req, res, url)) return true
+  if (await handleDesktopOpenRoutes(req, res, url)) return true
+  // webhook 必须在 JSON 体解析之前处理：签名是对**原始字节**做的
+  if (await handleGithubWebhookRoutes(req, res, url)) return true
+  if (await handleScheduleRoutes(req, res, url)) return true
+  if (await handleBrowserPreviewRoutes(req, res, url, context)) return true
+  if (await handleFeedbackRoutes(req, res, url)) return true
+  if (await handleMemoryRoutes(req, res, url)) return true
+  if (await handleUsageRoutes(req, res, url)) return true
+  if (await handleWorkspaceRoutes(req, res, url)) return true
+  if (await handleSessionArchiveRoutes(req, res, url, context)) return true
+  if (await handleWorktreeRoutes(req, res, url)) return true
+  if (await handleWorkflowRoutes(req, res, url)) return true
+  if (await handlePluginRoutes(req, res, url)) return true
+  if (await handleKnowledgeRoutes(req, res, url)) return true
+  if (await handlePanelRoutes(req, res, url, context)) return true
+  if (await handlePetRoutes(req, res, url)) return true
+  if (await handleMediaRoutes(req, res, url)) return true
+  if (await handleMapRoutes(req, res, url, context)) return true
+  if (await handleActivationRoutes(req, res, url, context)) return true
+      if (await handleSettingsRoutes(req, res, url, context)) return true
+  if (await handleEmbeddingRoutes(req, res, url)) return true
+  if (await handleAdminRoutes(req, res, url, context)) return true
+  if (await handleTTSRoutes(req, res, url)) return true
+  if (await handleSystemStatusRoutes(req, res, url)) return true
+  if (await handleStaticRoutes(req, res, url)) return true
+  return false
+}
+
+function attachCloudASR() {
+  const cloudWss = new WebSocketServer({
+    noServer: true,
+    maxPayload: 256 * 1024,
+    handleProtocols: selectWebSocketProtocol,
+  })
+  cloudWss.on('connection', (ws) => {
+    let session = null
+    let configured = false
+    let cleanedUp = false
+    const cleanup = () => {
+      if (cleanedUp) return
+      cleanedUp = true
+      session?.close()
+      session = null
+    }
+    attachWebSocketIdleTimeout(ws, 60 * 1000, cleanup)
+
+    ws.on('message', async (raw) => {
+      if (!configured) {
+        try {
+          const msg = JSON.parse(raw.toString())
+          if (msg.type !== 'config') return
+          configured = true
+          const rawCfg = getVoiceRuntimeConfig(msg.provider || 'aliyun')
+          const provider = rawCfg.provider
+          const lang = msg.lang || rawCfg.lang || 'zh'
+          const nextSession = await createCloudASRSession(
+            { ...rawCfg, provider, lang },
+            (text, isFinal, seg) => {
+              try { ws.send(JSON.stringify({ type: 'transcript', text, is_final: isFinal, seg })) } catch {}
+            },
+            (errMsg) => {
+              try { ws.send(JSON.stringify({ type: 'error', message: errMsg })) } catch {}
+            },
+            () => { try { ws.close() } catch {} },
+            (event, info) => {
+              try { ws.send(JSON.stringify({ type: 'diag', event, info })) } catch {}
+            },
+          )
+          if (cleanedUp) {
+            nextSession?.close()
+          } else {
+            session = nextSession
+          }
+        } catch (err) {
+          if (!cleanedUp) configured = false
+          try {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `ASR 初始化失败: ${err?.message || String(err)}`,
+            }))
+          } catch {}
+        }
+        return
+      }
+
+      if (raw instanceof Buffer) {
+        session?.sendAudio(raw)
+      } else {
+        try {
+          const msg = JSON.parse(raw.toString())
+          if (msg.type === 'flush') session?.flush()
+        } catch {}
+      }
+    })
+
+    ws.on('close', cleanup)
+    ws.on('error', cleanup)
+  })
+
+  return cloudWss
+}
+
+function attachSceneProtocol() {
+  const sceneWss = new WebSocketServer({
+    noServer: true,
+    maxPayload: 1024 * 1024,
+    handleProtocols: selectWebSocketProtocol,
+  })
+  sceneWss.on('connection', (ws) => handleSceneConnection(ws))
+
+  const SCENE_PASSIVE_INTENTS = new Set(['dismiss', 'ended', 'mounted', 'dwell'])
+  setSceneIntentHandler((msg) => {
+    const surface = msg.surface || 'scene'
+    const name = msg.name || 'unknown'
+    const data = msg.data || {}
+    const id = insertUISignal({ type: `scene.intent.${name}`, target: msg.surface || null, payload: data, ts: msg.ts || Date.now() })
+    emitEvent('ui_signal', { id, type: name, target: msg.surface, payload: data })
+
+    if (name === 'select' && surface.startsWith('security-confirm-')) {
+      const pending = sceneStore.get(surface)?.data?.pending || {}
+      sceneStore.set(surface, null)
+      if (data.value === 'confirm') {
+        const updates = {}
+        if (pending.file_sandbox !== undefined) updates.fileSandbox = pending.file_sandbox === true
+        if (pending.exec_sandbox !== undefined) updates.execSandbox = pending.exec_sandbox === true
+        if (pending.browser_private_network !== undefined) updates.browserPrivateNetwork = pending.browser_private_network === true
+        const result = Object.keys(updates).length > 0 ? setSecurity(updates) : getSecurity()
+        const desc = Object.entries(updates).map(([k, v]) => `${k}=${v}`).join(', ')
+        pushMessage(
+          'SYSTEM',
+          `[security settings updated] User confirmed changes: ${desc}. changed_at=${result.updatedAt || 'not recorded'}\n(Internal context refresh only. Do NOT call send_message.)`,
+          'APP_SIGNAL',
+          { queue: 'background', persist: false, silent: true },
+        )
+      } else {
+        pushMessage(
+          'SYSTEM',
+          '[security settings change] User cancelled - settings unchanged\n(Internal context refresh only. Do NOT call send_message.)',
+          'APP_SIGNAL',
+          { queue: 'background', persist: false, silent: true },
+        )
+      }
+      return
+    }
+
+    if (!SCENE_PASSIVE_INTENTS.has(name)) {
+      pushMessage(`UI:${surface}`, `[UI intent surface=${surface} name=${name}]\n${JSON.stringify(data, null, 2)}`, 'APP_SIGNAL')
+    }
+  })
+
+  return sceneWss
+}
+
+function attachWebSocketUpgrades(server, port, { sceneWss, cloudWss }) {
+  const routes = new Map([
+    ['/scene', sceneWss],
+    ['/voice/cloud', cloudWss],
+  ])
+  const knownPaths = new Set(routes.keys())
+  server.on('upgrade', (req, socket, head) => {
+    let url
+    try { url = new URL(req.url, `http://localhost:${port}`) } catch {
+      return rejectWebSocketUpgrade(socket, 404)
+    }
+    const target = routes.get(url.pathname)
+    const auth = authorizeWebSocketUpgrade(req, {
+      pathname: url.pathname,
+      lanEnabled: isLanAccessEnabled(),
+      expectedToken: getAuthToken(),
+      knownPaths,
+    })
+    if (!auth.ok || !target) return rejectWebSocketUpgrade(socket, auth.status)
+    target.handleUpgrade(req, socket, head, (ws) => target.emit('connection', ws, req))
+  })
+}
+
+export function startAPI(port = 3721, {
+  getStateSnapshot = null,
+  onActivated = null,
+  onActivationIntroComplete = null,
+} = {}) {
+  const onActivatedCallback = onActivated
+  const onActivationIntroCompleteCallback = onActivationIntroComplete
+  const host = getApiHost()
+  const tlsOptions = getTlsOptions()
+  const protocol = tlsOptions ? 'https' : 'http'
+  let pendingActivation = null
+
+  function storePreparedActivation({ apiKey, info }) {
+    pendingActivation = {
+      token: crypto.randomUUID(),
+      apiKey: String(apiKey || '').trim(),
+      info,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    }
+    return pendingActivation
+  }
+
+  function getPreparedActivation(token, apiKey) {
+    if (!pendingActivation) return null
+    if (pendingActivation.expiresAt <= Date.now()) {
+      pendingActivation = null
+      return null
+    }
+    if (!token || pendingActivation.token !== token) return null
+    if (pendingActivation.apiKey !== String(apiKey || '').trim()) return null
+    return pendingActivation
+  }
+
+  function clearPreparedActivation() {
+    pendingActivation = null
+  }
+
+  try {
+    const storedName = (getConfig('agent_name') || '').trim()
+    if (storedName) setStickyEvent('agent_name_updated', { name: storedName })
+  } catch {}
+
+  const routeContext = {
+    getStateSnapshot,
+    hasAllowedAccess,
+    requireLocalOrToken,
+    storePreparedActivation,
+    getPreparedActivation,
+    clearPreparedActivation,
+    onActivated: onActivatedCallback,
+    onActivationIntroComplete: onActivationIntroCompleteCallback,
+  }
+
+  const requestHandler = async (req, res) => {
+    const base = `${protocol}://localhost:${port}`
+    const url = new URL(req.url, base)
+    const origin = req.headers.origin
+
+    try {
+      if (await handleSocialRoutes(req, res, url, { hasAllowedAccess, requireLocalOrToken })) return
+
+      // SSH 远程机器托管：**必须排在外层 origin / 鉴权 / 通用 OPTIONS 闸之前**。
+      // 它自带 loopback-only 闸门，且契约要求自己的错误信封
+      // （`{ok:false,error:{code:"forbidden",message:"this API is loopback-only"}}`）。
+      // 放到 dispatch 里的话，非 loopback 的请求会先被下面的统一 403 `{error:'forbidden'}`
+      // 拦掉，OPTIONS 也会被通用 204 截胡——两个信封都对不上。
+      if (await handleSshRemoteRoutes(req, res, url)) return
+
+      if (origin && !isAllowedOrigin(origin)) {
+        return jsonResponse(res, 403, { ok: false, error: 'forbidden origin' })
+      }
+
+      if (!hasAllowedAccess(req, url)) {
+        return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      }
+
+      setCorsHeaders(req, res, origin)
+
+      if (req.method !== 'OPTIONS' && isSensitivePath(url.pathname) && !requireLocalOrToken(req, res, url)) return
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204)
+        res.end()
+        return
+      }
+
+      if (await dispatchHttpRoutes(req, res, url, routeContext)) return
+      jsonResponse(res, 404, { error: 'not found' })
+    } catch (err) {
+      console.error('[API] request failed:', err)
+      if (!res.headersSent) jsonResponse(res, 500, { ok: false, error: err.message || 'internal error' })
+      else try { res.end() } catch {}
+    }
+  }
+  const server = tlsOptions
+    ? https.createServer(tlsOptions, requestHandler)
+    : http.createServer(requestHandler)
+
+  const cloudWss = attachCloudASR()
+  const sceneWss = attachSceneProtocol()
+  attachWebSocketUpgrades(server, port, { sceneWss, cloudWss })
+
+  // 插件宿主（阶段 6.7）：目录不存在就是「没有插件」，不建目录、不报错。
+  // 插件在**本进程内以完整权限**运行——没有沙箱，详见 runtime/plugin-host.js 顶部说明。
+  startPluginHost().catch((error) => {
+    console.error('[API] plugin host failed to start:', error)
+  })
+  server.on('close', () => {
+    stopPluginHost().catch((error) => {
+      console.error('[API] plugin host failed to stop:', error)
+    })
+  })
+
+  server.listen(port, host, () => {
+    console.log(`[API] Listening at ${protocol}://${host}:${port}`)
+    console.log('[API]   POST /message  - send message to agent')
+    console.log('[API]   GET  /events   - SSE real-time stream (receive agent messages)')
+    console.log('[API]   GET  /memories - query memories')
+    console.log('[API]   GET  /knowledge/regions, /knowledge/search - query source-backed knowledge')
+    console.log('[API]   POST /knowledge/documents - ingest already-extracted source text')
+    console.log('[API]   GET  /audit/recall, /audit/extract, /audit/stats - memory observability (Phase 0)')
+    console.log('[API]   GET  /status   - status')
+    console.log('[API]   GET  /plugins  - plugin host status (POST /plugins/reload, /plugins/toggle)')
+    console.log('[API]   WS   /scene    - Scene declarative UI channel')
+  })
+
+  return server
+}
